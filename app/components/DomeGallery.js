@@ -745,16 +745,16 @@ export default function DomeGallery({
       }
     }
     
-    // body.dg-scroll-lock {
-    //   position: fixed !important;
-    //   top: 0;
-    //   left: 0;
-    //   width: 100% !important;
-    //   height: 100% !important;
-    //   overflow: hidden !important;
-    //   touch-action: none !important;
-    //   overscroll-behavior: contain !important;
-    // }
+    body.dg-scroll-lock {
+      position: fixed !important;
+      top: 0;
+      left: 0;
+      width: 100% !important;
+      height: 100% !important;
+      overflow: hidden !important;
+      touch-action: none !important;
+      overscroll-behavior: none !important;
+    }
     .item__image {
       position: absolute;
       inset: 10px;
@@ -802,6 +802,8 @@ export default function DomeGallery({
                     ["--tile-radius"]: imageBorderRadius,
                     ["--enlarge-radius"]: openedImageBorderRadius,
                     ["--image-filter"]: grayscale ? "grayscale(1)" : "none",
+                    touchAction: "none",
+                    overscrollBehavior: "none",
                 }}
             >
                 <main

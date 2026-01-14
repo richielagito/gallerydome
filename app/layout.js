@@ -27,6 +27,11 @@ export const metadata = {
     description: "A 3D Gallery Experience",
 };
 
+export const viewport = {
+    viewportFit: "cover",
+    themeColor: "#000000",
+};
+
 export default function RootLayout({ children }) {
     return (
         <html lang="en">

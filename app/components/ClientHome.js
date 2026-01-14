@@ -33,7 +33,7 @@ export default function ClientHome({ initialImages = [] }) {
             </div>
 
             {/* Top "Stop Exploring" Button */}
-            <div className={`absolute top-6 left-0 w-full text-center z-20 pointer-events-none transition-opacity duration-1000 ${isExplored ? "opacity-100" : "opacity-0"}`}>
+            <div className={`absolute top-[calc(1.5rem+env(safe-area-inset-top))] left-0 w-full text-center z-20 pointer-events-none transition-opacity duration-1000 ${isExplored ? "opacity-100" : "opacity-0"}`}>
                 <button
                     onClick={() => setIsExplored(false)}
                     className={`text-white/40 hover:text-white/80 transition-colors text-xs md:text-sm font-light font-spartan tracking-widest uppercase cursor-pointer ${isExplored ? "pointer-events-auto" : "pointer-events-none"}`}
@@ -43,7 +43,7 @@ export default function ClientHome({ initialImages = [] }) {
             </div>
 
             {/* Footer Layer */}
-            <div className="absolute bottom-6 left-0 w-full text-center z-20 pointer-events-none">
+            <div className="absolute bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-0 w-full text-center z-20 pointer-events-none">
                 <p suppressHydrationWarning className="text-white/40 text-xs md:text-sm font-light font-spartan tracking-widest">
                     © {new Date().getFullYear()} Richie Lagito.
                 </p>
