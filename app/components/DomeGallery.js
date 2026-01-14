@@ -7,7 +7,7 @@ import { useGesture } from "@use-gesture/react";
 const DEFAULT_IMAGES = [];
 
 const DEFAULTS = {
-    maxVerticalRotationDeg: 0,
+    maxVerticalRotationDeg: 10,
     dragSensitivity: 20,
     enlargeTransitionMs: 300,
     segments: 35,
