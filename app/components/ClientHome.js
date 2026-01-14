@@ -9,7 +9,7 @@ export default function ClientHome({ initialImages = [] }) {
     return (
         <div className="relative w-screen h-screen overflow-hidden bg-black">
             {/* Gallery Layer */}
-            <div className={`absolute inset-0 transition-all duration-[2000ms] ease-in-out ${isExplored ? "opacity-100 scale-100" : "opacity-0 scale-90 pointer-events-none"}`}>
+            <div className={`absolute inset-0 transition-all duration-[2000ms] ease-in-out ${isExplored ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
                 <DomeGallery maxVerticalRotationDeg={8} segments={28} grayscale={false} interactive={isExplored} images={initialImages} />
             </div>
 

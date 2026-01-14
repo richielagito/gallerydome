@@ -776,6 +776,16 @@ export default function DomeGallery({
       inset: 10px;
       pointer-events: none;
     }
+    
+    .stage {
+      transition: transform 2000ms ease-in-out;
+    }
+    .sphere-root[data-interactive="false"] .stage {
+      transform: scale(0.9);
+    }
+    .sphere-root[data-interactive="true"] .stage {
+      transform: scale(1);
+    }
   `;
 
     return (
