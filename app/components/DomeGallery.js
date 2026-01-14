@@ -99,6 +99,7 @@ export default function DomeGallery({
     openedImageBorderRadius = "30px",
     grayscale = true,
     interactive = true,
+    onLoad,
 }) {
     const rootRef = useRef(null);
     const mainRef = useRef(null);
@@ -234,6 +235,7 @@ export default function DomeGallery({
 
     useEffect(() => {
         applyTransform(rotationRef.current.x, rotationRef.current.y);
+        onLoad?.();
     }, []);
 
     const stopInertia = useCallback(() => {
@@ -392,35 +394,39 @@ export default function DomeGallery({
             const currentRect = overlay.getBoundingClientRect();
             const rootRect = rootRef.current.getBoundingClientRect();
 
-            const originalPosRelativeToRoot = {
-                left: originalPos.left - rootRect.left,
-                top: originalPos.top - rootRect.top,
-                width: originalPos.width,
-                height: originalPos.height,
-            };
-
-            const overlayRelativeToRoot = {
+            // Calculate current relative position (start of animation)
+            const startRel = {
                 left: currentRect.left - rootRect.left,
                 top: currentRect.top - rootRect.top,
                 width: currentRect.width,
                 height: currentRect.height,
             };
 
+            // Calculate target relative position (original tile)
+            const targetRel = {
+                left: originalPos.left - rootRect.left,
+                top: originalPos.top - rootRect.top,
+                width: originalPos.width,
+                height: originalPos.height,
+            };
+
             const animatingOverlay = document.createElement("div");
             animatingOverlay.className = "enlarge-closing";
+            // Set initial state to match the current expanded overlay
             animatingOverlay.style.cssText = `
         position: absolute;
-        left: ${overlayRelativeToRoot.left}px;
-        top: ${overlayRelativeToRoot.top}px;
-        width: ${overlayRelativeToRoot.width}px;
-        height: ${overlayRelativeToRoot.height}px;
+        left: ${startRel.left}px;
+        top: ${startRel.top}px;
+        width: ${startRel.width}px;
+        height: ${startRel.height}px;
         z-index: 9999;
         border-radius: ${openedImageBorderRadius};
         overflow: hidden;
-        transition: all ${enlargeTransitionMs}ms ease-out;
+        transition: transform ${enlargeTransitionMs}ms cubic-bezier(0.2, 0, 0.2, 1), opacity ${enlargeTransitionMs}ms ease, padding ${enlargeTransitionMs}ms ease;
         pointer-events: none;
         margin: 0;
-        transform: none;
+        transform-origin: top left;
+        transform: translate(0, 0) scale(1, 1);
         filter: ${grayscale ? "grayscale(1)" : "none"};
         box-sizing: border-box;
         padding: 30px;
@@ -437,11 +443,14 @@ export default function DomeGallery({
 
             void animatingOverlay.getBoundingClientRect();
 
+            // Calculate transforms to map start -> target
+            const tx = targetRel.left - startRel.left;
+            const ty = targetRel.top - startRel.top;
+            const sx = targetRel.width / startRel.width;
+            const sy = targetRel.height / startRel.height;
+
             requestAnimationFrame(() => {
-                animatingOverlay.style.left = originalPosRelativeToRoot.left + "px";
-                animatingOverlay.style.top = originalPosRelativeToRoot.top + "px";
-                animatingOverlay.style.width = originalPosRelativeToRoot.width + "px";
-                animatingOverlay.style.height = originalPosRelativeToRoot.height + "px";
+                animatingOverlay.style.transform = `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`;
                 animatingOverlay.style.opacity = "0";
                 animatingOverlay.style.padding = "0px";
             });
@@ -529,7 +538,7 @@ export default function DomeGallery({
 
         void refDiv.offsetHeight;
 
-        const tileR = refDiv.getBoundingClientRect();
+        const tileR = refDiv.getBoundingClientRect(); // Start Rect
         const mainR = mainRef.current?.getBoundingClientRect();
         const frameR = frameRef.current?.getBoundingClientRect();
 
@@ -551,22 +560,57 @@ export default function DomeGallery({
         el.style.visibility = "hidden";
         el.style.zIndex = 0;
 
+        // Determine Final Target Geometry (Relative to mainR)
+        // Default to frameR
+        let finalW = frameR.width;
+        let finalH = frameR.height;
+        let finalTop = frameR.top - mainR.top;
+        let finalLeft = frameR.left - mainR.left;
+
+        // If custom size is requested
+        if (openedImageWidth && openedImageHeight) {
+            const tempDiv = document.createElement("div");
+            tempDiv.style.cssText = `position: absolute; width: ${openedImageWidth}; height: ${openedImageHeight}; visibility: hidden;`;
+            document.body.appendChild(tempDiv);
+            const tempRect = tempDiv.getBoundingClientRect();
+            document.body.removeChild(tempDiv);
+
+            finalW = tempRect.width;
+            finalH = tempRect.height;
+            // Center it over the frame
+            finalLeft = frameR.left - mainR.left + (frameR.width - tempRect.width) / 2;
+            finalTop = frameR.top - mainR.top + (frameR.height - tempRect.height) / 2;
+        }
+
         const overlay = document.createElement("div");
         overlay.className = "enlarge";
         overlay.style.position = "absolute";
-        overlay.style.left = frameR.left - mainR.left + "px";
-        overlay.style.top = frameR.top - mainR.top + "px";
-        overlay.style.width = frameR.width + "px";
-        overlay.style.height = frameR.height + "px";
+        // Initialize at FINAL position/size
+        overlay.style.left = finalLeft + "px";
+        overlay.style.top = finalTop + "px";
+        overlay.style.width = finalW + "px";
+        overlay.style.height = finalH + "px";
+
         overlay.style.opacity = "0";
         overlay.style.zIndex = "30";
         overlay.style.willChange = "transform, opacity";
         overlay.style.transformOrigin = "top left";
-        overlay.style.transition = `transform ${enlargeTransitionMs}ms ease, opacity ${enlargeTransitionMs}ms ease, padding ${enlargeTransitionMs}ms ease`;
+        // Use transform mostly
+        overlay.style.transition = `transform ${enlargeTransitionMs}ms cubic-bezier(0.2, 0, 0.2, 1), opacity ${enlargeTransitionMs}ms ease, padding ${enlargeTransitionMs}ms ease`;
         overlay.style.borderRadius = openedImageBorderRadius;
         overlay.style.overflow = "hidden";
         overlay.style.boxSizing = "border-box";
         overlay.style.padding = "0px";
+
+        // Calculate Start Transform (Tile -> Final)
+        // tileR is valid. finalW/H are valid.
+        const startTx = tileR.left - mainR.left - finalLeft;
+        const startTy = tileR.top - mainR.top - finalTop;
+        const startSx = tileR.width / finalW;
+        const startSy = tileR.height / finalH;
+
+        // Apply Start Transform immediately
+        overlay.style.transform = `translate(${startTx}px, ${startTy}px) scale(${startSx}, ${startSy})`;
 
         const fullSrc = parent.dataset.src || el.querySelector("img")?.src || "";
         const rawAlt = parent.dataset.alt || el.querySelector("img")?.alt || "";
@@ -574,14 +618,14 @@ export default function DomeGallery({
 
         const img = document.createElement("img");
         if (smallSrc) img.src = smallSrc;
-        else img.style.opacity = "0"; // Hide if no src yet
+        else img.style.opacity = "0";
         img.alt = rawAlt;
         img.style.width = "100%";
         img.style.height = "100%";
         img.style.objectFit = "cover";
         img.style.borderRadius = openedImageBorderRadius;
         img.style.filter = grayscale ? "grayscale(1)" : "none";
-        img.style.transition = "filter 0.3s ease"; // smooth transition if filter changes
+        img.style.transition = "filter 0.3s ease";
         overlay.appendChild(img);
 
         // Render Caption if available
@@ -599,11 +643,10 @@ export default function DomeGallery({
             captionEl.style.fontSize = "1rem";
             captionEl.style.textAlign = "center";
             captionEl.style.pointerEvents = "none";
-            captionEl.style.opacity = "0"; // Fade in with overlay
-            captionEl.style.transition = "opacity 0.5s ease 0.3s"; // Delay slightly
+            captionEl.style.opacity = "0";
+            captionEl.style.transition = "opacity 0.5s ease 0.2s";
             overlay.appendChild(captionEl);
 
-            // Trigger fade in after mount
             requestAnimationFrame(() => {
                 captionEl.style.opacity = "1";
             });
@@ -611,7 +654,6 @@ export default function DomeGallery({
 
         viewerRef.current.appendChild(overlay);
 
-        // Progressively load high-res image
         if (fullSrc && fullSrc !== smallSrc) {
             const highResImg = new window.Image();
             highResImg.src = fullSrc;
@@ -622,58 +664,13 @@ export default function DomeGallery({
             };
         }
 
-        const tx0 = tileR.left - frameR.left;
-        const ty0 = tileR.top - frameR.top;
-        const sx0 = tileR.width / frameR.width;
-        const sy0 = tileR.height / frameR.height;
-
-        const validSx0 = isFinite(sx0) && sx0 > 0 ? sx0 : 1;
-        const validSy0 = isFinite(sy0) && sy0 > 0 ? sy0 : 1;
-
-        overlay.style.transform = `translate(${tx0}px, ${ty0}px) scale(${validSx0}, ${validSy0})`;
-
-        setTimeout(() => {
-            if (!overlay.parentElement) return;
+        // Trigger animation to Identity
+        requestAnimationFrame(() => {
             overlay.style.opacity = "1";
             overlay.style.padding = "30px";
             overlay.style.transform = "translate(0px, 0px) scale(1, 1)";
             rootRef.current?.setAttribute("data-enlarging", "true");
-        }, 16);
-
-        const wantsResize = openedImageWidth || openedImageHeight;
-        if (wantsResize) {
-            const onFirstEnd = (ev) => {
-                if (ev.propertyName !== "transform") return;
-                overlay.removeEventListener("transitionend", onFirstEnd);
-                const prevTransition = overlay.style.transition;
-                overlay.style.transition = "none";
-                const tempWidth = openedImageWidth || `${frameR.width}px`;
-                const tempHeight = openedImageHeight || `${frameR.height}px`;
-                overlay.style.width = tempWidth;
-                overlay.style.height = tempHeight;
-                const newRect = overlay.getBoundingClientRect();
-                overlay.style.width = frameR.width + "px";
-                overlay.style.height = frameR.height + "px";
-                void overlay.offsetWidth;
-                overlay.style.transition = `left ${enlargeTransitionMs}ms ease, top ${enlargeTransitionMs}ms ease, width ${enlargeTransitionMs}ms ease, height ${enlargeTransitionMs}ms ease`;
-                const centeredLeft = frameR.left - mainR.left + (frameR.width - newRect.width) / 2;
-                const centeredTop = frameR.top - mainR.top + (frameR.height - newRect.height) / 2;
-                requestAnimationFrame(() => {
-                    overlay.style.left = `${centeredLeft}px`;
-                    overlay.style.top = `${centeredTop}px`;
-                    overlay.style.width = tempWidth;
-                    overlay.style.height = tempHeight;
-                });
-                const cleanupSecond = () => {
-                    overlay.removeEventListener("transitionend", cleanupSecond);
-                    overlay.style.transition = prevTransition;
-                };
-                overlay.addEventListener("transitionend", cleanupSecond, {
-                    once: true,
-                });
-            };
-            overlay.addEventListener("transitionend", onFirstEnd);
-        }
+        });
     };
 
     useEffect(() => {
@@ -839,7 +836,7 @@ export default function DomeGallery({
                                     }}
                                 >
                                     <div
-                                        className="item__image absolute block overflow-hidden cursor-pointer bg-gray-200 transition-transform duration-300"
+                                        className="item__image absolute block overflow-hidden cursor-pointer bg-neutral-900 transition-transform duration-300 group"
                                         role="button"
                                         tabIndex={0}
                                         aria-label={it.alt || "Open image"}
@@ -864,6 +861,7 @@ export default function DomeGallery({
                                             backfaceVisibility: "hidden",
                                         }}
                                     >
+                                        <div className="absolute inset-0 bg-neutral-800 animate-pulse z-0" />
                                         <Image
                                             src={it.src}
                                             fill

@@ -5,12 +5,13 @@ import DomeGallery from "./DomeGallery";
 
 export default function ClientHome({ initialImages = [] }) {
     const [isExplored, setIsExplored] = useState(false);
+    const [isGalleryLoaded, setIsGalleryLoaded] = useState(false);
 
     return (
-        <div className="relative w-screen h-screen overflow-hidden bg-black">
+        <div className="relative w-full h-[100dvh] overflow-hidden bg-black">
             {/* Gallery Layer */}
             <div className={`absolute inset-0 transition-all duration-[2000ms] ease-in-out ${isExplored ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
-                <DomeGallery maxVerticalRotationDeg={8} segments={28} grayscale={false} interactive={isExplored} images={initialImages} />
+                <DomeGallery maxVerticalRotationDeg={8} segments={28} grayscale={false} interactive={isExplored} images={initialImages} onLoad={() => setIsGalleryLoaded(true)} />
             </div>
 
             {/* Content Layer (Title & Button) */}
@@ -25,9 +26,12 @@ export default function ClientHome({ initialImages = [] }) {
                 <div className={`absolute bottom-32 transition-all duration-[1500ms] ease-in-out delay-100 ${isExplored ? "translate-y-[150vh] opacity-0" : "translate-y-0 opacity-100"}`}>
                     <button
                         onClick={() => setIsExplored(true)}
-                        className="pointer-events-auto cursor-pointer px-8 py-3 bg-white/0 hover:bg-white/20 text-white rounded-full border border-white/30 backdrop-blur-md transition-all active:scale-95 text-lg tracking-widest uppercase font-light"
+                        disabled={!isGalleryLoaded}
+                        className={`pointer-events-auto cursor-pointer px-8 py-3 bg-white/0 hover:bg-white/20 text-white rounded-full border border-white/30 backdrop-blur-md transition-all active:scale-95 text-lg tracking-widest uppercase font-light ${
+                            !isGalleryLoaded ? "opacity-50 cursor-not-allowed" : ""
+                        }`}
                     >
-                        Explore
+                        {isGalleryLoaded ? "Explore" : "Loading..."}
                     </button>
                 </div>
             </div>
@@ -36,7 +40,7 @@ export default function ClientHome({ initialImages = [] }) {
             <div className={`absolute top-[calc(1.5rem+env(safe-area-inset-top))] left-0 w-full text-center z-20 pointer-events-none transition-opacity duration-1000 ${isExplored ? "opacity-100" : "opacity-0"}`}>
                 <button
                     onClick={() => setIsExplored(false)}
-                    className={`text-white/40 hover:text-white/80 transition-colors text-xs md:text-sm font-light font-spartan tracking-widest uppercase cursor-pointer ${isExplored ? "pointer-events-auto" : "pointer-events-none"}`}
+                    className={`text-white/40 hover:text-white/80 transition-colors text-xs md:text-sm font-medium font-spartan tracking-widest uppercase cursor-pointer ${isExplored ? "pointer-events-auto" : "pointer-events-none"}`}
                 >
                     stop exploring
                 </button>
@@ -44,7 +48,7 @@ export default function ClientHome({ initialImages = [] }) {
 
             {/* Footer Layer */}
             <div className="absolute bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-0 w-full text-center z-20 pointer-events-none">
-                <p suppressHydrationWarning className="text-white/40 text-xs md:text-sm font-light font-spartan tracking-widest">
+                <p suppressHydrationWarning className="text-white/40 text-xs md:text-sm font-medium font-spartan tracking-widest">
                     © {new Date().getFullYear()} Richie Lagito.
                 </p>
             </div>

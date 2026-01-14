@@ -121,9 +121,15 @@
     * {
         @apply border-border outline-ring/50;
     }
+    html,
+    body {
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        overscroll-behavior: none;
+    }
     body {
         @apply bg-black text-foreground;
         background-color: black;
-        overscroll-behavior: none;
     }
 }
