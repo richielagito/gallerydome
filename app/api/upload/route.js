@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { v2 as cloudinary } from "cloudinary";
 
 // Configure Cloudinary (re-use config logic or import, but config is global once set usually.
@@ -57,6 +58,7 @@ export async function POST(request) {
             uploadStream.end(buffer);
         });
 
+        revalidatePath("/");
         return NextResponse.json({ success: true, result });
     } catch (error) {
         console.error("Upload error:", error);

@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import DomeGallery from "./DomeGallery";
+import { refreshGallery } from "../actions";
 
 export default function ClientHome({ initialImages = [] }) {
     const [isExplored, setIsExplored] = useState(false);
     const [isGalleryLoaded, setIsGalleryLoaded] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     return (
         <div className="relative w-full h-[100dvh] overflow-hidden bg-black">
@@ -43,6 +45,36 @@ export default function ClientHome({ initialImages = [] }) {
                     className={`text-white/40 hover:text-white/80 transition-colors text-xs md:text-sm font-medium font-spartan tracking-widest uppercase cursor-pointer ${isExplored ? "pointer-events-auto" : "pointer-events-none"}`}
                 >
                     stop exploring
+                </button>
+            </div>
+
+            {/* Refresh Button */}
+            <div className={`absolute top-[calc(1.5rem+env(safe-area-inset-top))] right-4 md:right-8 z-30 pointer-events-none transition-opacity duration-1000 ${isExplored ? "opacity-100" : "opacity-0"}`}>
+                <button
+                    onClick={async () => {
+                        if (isRefreshing) return;
+                        setIsRefreshing(true);
+                        await refreshGallery();
+                        setTimeout(() => setIsRefreshing(false), 2000);
+                    }}
+                    className={`text-white/40 hover:text-white/80 transition-colors p-2 cursor-pointer ${isExplored ? "pointer-events-auto" : "pointer-events-none"}`}
+                    title="Refresh Gallery"
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className={`${isRefreshing ? "animate-spin animate-pulse opacity-100" : ""}`}
+                    >
+                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+                        <path d="M21 3v5h-5" />
+                    </svg>
                 </button>
             </div>
 
