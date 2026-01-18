@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { v2 as cloudinary } from "cloudinary";
 
-// Configure Cloudinary (re-use config logic or import, but config is global once set usually.
-// Safer to explicitly config here in case this route runs in a cold lambda)
 cloudinary.config({
     cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
@@ -13,10 +11,8 @@ cloudinary.config({
 
 export async function POST(request) {
     try {
-        const data = await request.formData();
-        const password = data.get("password");
-        const file = data.get("file");
-        const caption = data.get("caption");
+        const body = await request.json();
+        const { password, caption } = body;
 
         // 1. Verify Authentication
         if (!process.env.ADMIN_PASSWORD) {
@@ -25,43 +21,35 @@ export async function POST(request) {
         }
 
         if (password !== process.env.ADMIN_PASSWORD) {
-            console.warn(`Upload attempt failed: Incorrect password. Received '${password}', expected set password.`);
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        if (!file || typeof file === "string") {
-            // basic check
-            return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+        // 2. Prepare Parameters for Signature
+        const timestamp = Math.round(new Date().getTime() / 1000);
+        const paramsToSign = {
+            timestamp: timestamp,
+            folder: "gallery-dome",
+        };
+
+        // Only add context if caption is provided
+        if (caption && caption.trim().length > 0) {
+            paramsToSign.context = `caption=${caption}`;
         }
 
-        // 2. Convert file to buffer for upload
-        const bytes = await file.arrayBuffer();
-        const buffer = Buffer.from(bytes);
+        // 3. Generate Signature
+        const signature = cloudinary.utils.api_sign_request(paramsToSign, process.env.CLOUDINARY_API_SECRET);
 
-        // 3. Upload to Cloudinary with Metadata (Context)
-        // We use a Promise wrapper to handle the stream upload
-        const result = await new Promise((resolve, reject) => {
-            const uploadOptions = {
-                folder: "gallery-dome",
-                resource_type: "image", // Ensure strictly image
-            };
-
-            // Only add context if caption is provided
-            if (caption && caption.trim().length > 0) {
-                uploadOptions.context = `caption=${caption}`;
-            }
-
-            const uploadStream = cloudinary.uploader.upload_stream(uploadOptions, (error, result) => {
-                if (error) reject(error);
-                else resolve(result);
-            });
-            uploadStream.end(buffer);
+        // 4. Return necessary data to client
+        return NextResponse.json({
+            signature,
+            timestamp,
+            api_key: process.env.CLOUDINARY_API_KEY,
+            cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+            folder: paramsToSign.folder,
+            context: paramsToSign.context || null,
         });
-
-        revalidatePath("/");
-        return NextResponse.json({ success: true, result });
     } catch (error) {
-        console.error("Upload error:", error);
-        return NextResponse.json({ error: "Upload failed: " + error.message }, { status: 500 });
+        console.error("Signature generation error:", error);
+        return NextResponse.json({ error: "Signature generation failed: " + error.message }, { status: 500 });
     }
 }
