@@ -31,9 +31,20 @@ export async function POST(request) {
             folder: "gallery-dome",
         };
 
+        // Helper function to escape special characters for Cloudinary context
+        // Cloudinary context format requires escaping: = | \
+        const escapeContextValue = (value) => {
+            if (!value) return "";
+            return value
+                .replace(/\\/g, "\\\\") // Escape backslashes first
+                .replace(/=/g, "\\=") // Escape equals signs
+                .replace(/\|/g, "\\|"); // Escape pipe characters
+        };
+
         // Only add context if caption is provided
         if (caption && caption.trim().length > 0) {
-            paramsToSign.context = `caption=${caption}`;
+            const escapedCaption = escapeContextValue(caption.trim());
+            paramsToSign.context = `caption=${escapedCaption}`;
         }
 
         // 3. Generate Signature

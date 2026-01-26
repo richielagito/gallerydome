@@ -3,6 +3,161 @@
 import { useState } from "react";
 import { refreshGallery } from "../actions";
 
+// Maximum file size before compression (2MB)
+const MAX_FILE_SIZE = 2 * 1024 * 1024;
+// Maximum dimension for compressed images
+const MAX_DIMENSION = 2048;
+// JPEG quality for compression (0.0 - 1.0)
+const COMPRESSION_QUALITY = 0.85;
+
+/**
+ * Check if a file is HEIC/HEIF format
+ * @param {File} file - The file to check
+ * @returns {boolean}
+ */
+const isHeicFile = (file) => {
+    const fileName = file.name.toLowerCase();
+    const mimeType = file.type.toLowerCase();
+    return fileName.endsWith(".heic") || fileName.endsWith(".heif") || mimeType === "image/heic" || mimeType === "image/heif";
+};
+
+/**
+ * Convert HEIC/HEIF file to JPEG using heic2any library
+ * @param {File} file - The HEIC file to convert
+ * @returns {Promise<File>} - The converted JPEG file
+ */
+const convertHeicToJpeg = async (file) => {
+    // Dynamic import to avoid SSR issues
+    const heic2any = (await import("heic2any")).default;
+
+    const blob = await heic2any({
+        blob: file,
+        toType: "image/jpeg",
+        quality: 0.92, // Higher quality for initial conversion, we'll compress after
+    });
+
+    // heic2any can return an array of blobs for multi-image HEIC, get the first one
+    const resultBlob = Array.isArray(blob) ? blob[0] : blob;
+
+    // Create a new File from the blob with .jpg extension
+    const newFileName = file.name.replace(/\.(heic|heif)$/i, ".jpg");
+    return new File([resultBlob], newFileName, {
+        type: "image/jpeg",
+        lastModified: Date.now(),
+    });
+};
+
+/**
+ * Compress an image file using Canvas API
+ * Handles HEIC files by converting them first
+ * @param {File} file - The image file to compress
+ * @param {Function} onStatusUpdate - Optional callback for status updates
+ * @returns {Promise<{file: File, originalSize: number, compressedSize: number, wasCompressed: boolean, wasConverted: boolean}>}
+ */
+const compressImage = async (file, onStatusUpdate) => {
+    const originalSize = file.size;
+    let fileToProcess = file;
+    let wasConverted = false;
+
+    // Convert HEIC to JPEG first if needed
+    if (isHeicFile(file)) {
+        if (onStatusUpdate) onStatusUpdate("Converting HEIC to JPEG...");
+        try {
+            fileToProcess = await convertHeicToJpeg(file);
+            wasConverted = true;
+        } catch (error) {
+            console.error("HEIC conversion failed:", error);
+            throw new Error("Failed to convert HEIC image. Please try converting it manually or use a different format.");
+        }
+    }
+
+    // Skip compression for small files (after potential HEIC conversion)
+    if (fileToProcess.size <= MAX_FILE_SIZE && !wasConverted) {
+        return {
+            file: fileToProcess,
+            originalSize,
+            compressedSize: fileToProcess.size,
+            wasCompressed: false,
+            wasConverted,
+        };
+    }
+
+    if (onStatusUpdate) onStatusUpdate("Compressing image...");
+
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const reader = new FileReader();
+
+        reader.onload = (e) => {
+            img.src = e.target.result;
+        };
+
+        reader.onerror = () => reject(new Error("Failed to read file"));
+
+        img.onload = () => {
+            // Calculate new dimensions while maintaining aspect ratio
+            let { width, height } = img;
+
+            if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+                if (width > height) {
+                    height = Math.round((height * MAX_DIMENSION) / width);
+                    width = MAX_DIMENSION;
+                } else {
+                    width = Math.round((width * MAX_DIMENSION) / height);
+                    height = MAX_DIMENSION;
+                }
+            }
+
+            // Create canvas and draw resized image
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Convert to blob
+            canvas.toBlob(
+                (blob) => {
+                    if (!blob) {
+                        reject(new Error("Failed to compress image"));
+                        return;
+                    }
+
+                    // Create a new file from the blob
+                    const compressedFile = new File([blob], fileToProcess.name.replace(/\.[^.]+$/, ".jpg"), {
+                        type: "image/jpeg",
+                        lastModified: Date.now(),
+                    });
+
+                    resolve({
+                        file: compressedFile,
+                        originalSize,
+                        compressedSize: compressedFile.size,
+                        wasCompressed: true,
+                        wasConverted,
+                    });
+                },
+                "image/jpeg",
+                COMPRESSION_QUALITY,
+            );
+        };
+
+        img.onerror = () => reject(new Error("Failed to load image"));
+
+        reader.readAsDataURL(fileToProcess);
+    });
+};
+
+/**
+ * Format file size in human readable format
+ */
+const formatFileSize = (bytes) => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+};
+
 export default function AdminPage() {
     const [password, setPassword] = useState("");
     const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -12,6 +167,8 @@ export default function AdminPage() {
     const [isDragging, setIsDragging] = useState(false);
     const [caption, setCaption] = useState("");
     const [uploading, setUploading] = useState(false);
+    const [compressing, setCompressing] = useState(false);
+    const [compressionInfo, setCompressionInfo] = useState(null);
     const [message, setMessage] = useState("");
 
     // Clean up preview URL when file changes
@@ -20,6 +177,8 @@ export default function AdminPage() {
             setFile(selectedFile);
             const url = URL.createObjectURL(selectedFile);
             setPreviewUrl(url);
+            // Reset compression info when a new file is selected
+            setCompressionInfo(null);
         }
     };
 
@@ -44,6 +203,7 @@ export default function AdminPage() {
     const clearFile = () => {
         setFile(null);
         setPreviewUrl(null);
+        setCompressionInfo(null);
         const fileInput = document.getElementById("fileInput");
         if (fileInput) fileInput.value = "";
     };
@@ -82,7 +242,39 @@ export default function AdminPage() {
         setMessage("");
 
         try {
-            // 1. Get Signature from Server
+            // 1. Compress image if needed (also converts HEIC)
+            setCompressing(true);
+            setMessage("Processing image...");
+
+            let fileToUpload = file;
+            try {
+                const result = await compressImage(file, (status) => setMessage(status));
+                fileToUpload = result.file;
+                setCompressionInfo(result);
+
+                if (result.wasConverted || result.wasCompressed) {
+                    const savedPercent = Math.round((1 - result.compressedSize / result.originalSize) * 100);
+                    let statusMsg = "";
+                    if (result.wasConverted && result.wasCompressed) {
+                        statusMsg = `Converted HEIC & compressed: ${formatFileSize(result.originalSize)} → ${formatFileSize(result.compressedSize)} (${savedPercent}% saved)`;
+                    } else if (result.wasConverted) {
+                        statusMsg = `Converted HEIC: ${formatFileSize(result.originalSize)} → ${formatFileSize(result.compressedSize)}`;
+                    } else {
+                        statusMsg = `Compressed: ${formatFileSize(result.originalSize)} → ${formatFileSize(result.compressedSize)} (${savedPercent}% saved)`;
+                    }
+                    setMessage(statusMsg);
+                }
+            } catch (compressError) {
+                console.error("Image processing failed:", compressError);
+                setMessage(`Error: ${compressError.message}`);
+                setUploading(false);
+                setCompressing(false);
+                return;
+            }
+            setCompressing(false);
+
+            // 2. Get Signature from Server
+            setMessage("Preparing upload...");
             const signRes = await fetch("/api/upload", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -97,9 +289,10 @@ export default function AdminPage() {
 
             const { signature, timestamp, api_key, cloud_name, folder, context } = signData;
 
-            // 2. Upload directly to Cloudinary
+            // 3. Upload compressed file directly to Cloudinary
+            setMessage("Uploading...");
             const formData = new FormData();
-            formData.append("file", file);
+            formData.append("file", fileToUpload);
             formData.append("api_key", api_key);
             formData.append("timestamp", timestamp);
             formData.append("signature", signature);
@@ -184,7 +377,7 @@ export default function AdminPage() {
                                     />
                                 </svg>
                                 <p className="text-white/80 font-medium">Drag & Drop or Click to Upload</p>
-                                <p className="text-white/40 text-xs mt-2">Supports JPG, PNG, WEBP</p>
+                                <p className="text-white/40 text-xs mt-2">Supports JPG, PNG, WEBP, HEIC (iPhone)</p>
                             </div>
                         </div>
                     ) : (
@@ -216,6 +409,35 @@ export default function AdminPage() {
                                     />
                                 </svg>
                             </button>
+
+                            {/* File Size Info */}
+                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
+                                <p className="text-white/70 text-xs">
+                                    {isHeicFile(file) ? (
+                                        <span className="flex items-center gap-1 flex-wrap">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
+                                                <path
+                                                    fillRule="evenodd"
+                                                    d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
+                                                    clipRule="evenodd"
+                                                />
+                                            </svg>
+                                            <span className="text-purple-400">{formatFileSize(file.size)} (HEIC)</span>
+                                            <span className="text-white/50">• Will be converted to JPEG{file.size > MAX_FILE_SIZE ? " & compressed" : ""}</span>
+                                        </span>
+                                    ) : file.size > MAX_FILE_SIZE ? (
+                                        <span className="flex items-center gap-1">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                                            </svg>
+                                            <span className="text-yellow-400">{formatFileSize(file.size)}</span>
+                                            <span className="text-white/50">• Will be compressed before upload</span>
+                                        </span>
+                                    ) : (
+                                        <span className="text-green-400">{formatFileSize(file.size)} ✓</span>
+                                    )}
+                                </p>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -233,16 +455,42 @@ export default function AdminPage() {
 
                 <button
                     type="submit"
-                    disabled={uploading || !file}
+                    disabled={uploading || compressing || !file}
                     className={`mt-4 px-6 py-4 font-bold rounded tracking-widest uppercase transition-all
-                        ${uploading || !file ? "bg-white/10 text-white/30 cursor-not-allowed" : "bg-white text-black hover:bg-gray-200 active:scale-95"}
+                        ${uploading || compressing || !file ? "bg-white/10 text-white/30 cursor-not-allowed" : "bg-white text-black hover:bg-gray-200 active:scale-95"}
                     `}
                 >
-                    {uploading ? "Uploading..." : "Upload Photo"}
+                    {compressing ? (
+                        <span className="flex items-center justify-center gap-2">
+                            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Compressing...
+                        </span>
+                    ) : uploading ? (
+                        <span className="flex items-center justify-center gap-2">
+                            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Uploading...
+                        </span>
+                    ) : (
+                        "Upload Photo"
+                    )}
                 </button>
 
                 {message && (
-                    <div className={`p-4 rounded border ${message.includes("Error") ? "bg-red-500/10 border-red-500/50 text-red-200" : "bg-green-500/10 border-green-500/50 text-green-200"}`}>
+                    <div
+                        className={`p-4 rounded border ${
+                            message.includes("Error")
+                                ? "bg-red-500/10 border-red-500/50 text-red-200"
+                                : message.includes("Compress") || message.includes("Uploading") || message.includes("Preparing")
+                                  ? "bg-blue-500/10 border-blue-500/50 text-blue-200"
+                                  : "bg-green-500/10 border-green-500/50 text-green-200"
+                        }`}
+                    >
                         <p className="text-center text-sm">{message}</p>
                     </div>
                 )}
