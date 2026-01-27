@@ -275,7 +275,7 @@ export default function DomeGallery({
             stopInertia();
             inertiaRAF.current = requestAnimationFrame(step);
         },
-        [dragDampening, maxVerticalRotationDeg, stopInertia]
+        [dragDampening, maxVerticalRotationDeg, stopInertia],
     );
 
     useGesture(
@@ -360,7 +360,7 @@ export default function DomeGallery({
                 }
             },
         },
-        { target: mainRef, eventOptions: { passive: false }, enabled: interactive }
+        { target: mainRef, eventOptions: { passive: false }, enabled: interactive },
     );
 
     useEffect(() => {
