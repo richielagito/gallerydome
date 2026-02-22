@@ -7,471 +7,497 @@ import { useGesture } from "@use-gesture/react";
 const DEFAULT_IMAGES = [];
 
 const DEFAULTS = {
-  maxVerticalRotationDeg: 10,
-  dragSensitivity: 20,
-  enlargeTransitionMs: 300,
-  segments: 35,
+    maxVerticalRotationDeg: 10,
+    dragSensitivity: 20,
+    enlargeTransitionMs: 300,
+    segments: 35,
 };
 
 const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
 const normalizeAngle = (d) => ((d % 360) + 360) % 360;
 const wrapAngleSigned = (deg) => {
-  const a = (((deg + 180) % 360) + 360) % 360;
-  return a - 180;
+    const a = (((deg + 180) % 360) + 360) % 360;
+    return a - 180;
 };
 const getDataNumber = (el, name, fallback) => {
-  const attr = el.dataset[name] ?? el.getAttribute(`data-${name}`);
-  const n = attr == null ? NaN : parseFloat(attr);
-  return Number.isFinite(n) ? n : fallback;
+    const attr = el.dataset[name] ?? el.getAttribute(`data-${name}`);
+    const n = attr == null ? NaN : parseFloat(attr);
+    return Number.isFinite(n) ? n : fallback;
 };
 
 function buildItems(pool, seg) {
-  const xCols = Array.from({ length: seg }, (_, i) => -37 + i * 2);
-  const evenYs = [-4, -2, 0, 2, 4];
-  const oddYs = [-3, -1, 1, 3, 5];
+    const xCols = Array.from({ length: seg }, (_, i) => -37 + i * 2);
+    const evenYs = [-4, -2, 0, 2, 4];
+    const oddYs = [-3, -1, 1, 3, 5];
 
-  const coords = xCols.flatMap((x, c) => {
-    const ys = c % 2 === 0 ? evenYs : oddYs;
-    return ys.map((y) => ({ x, y, sizeX: 2, sizeY: 2 }));
-  });
+    const coords = xCols.flatMap((x, c) => {
+        const ys = c % 2 === 0 ? evenYs : oddYs;
+        return ys.map((y) => ({ x, y, sizeX: 2, sizeY: 2 }));
+    });
 
-  const totalSlots = coords.length;
-  if (pool.length === 0) {
-    return coords.map((c) => ({ ...c, src: "", alt: "" }));
-  }
-  if (pool.length > totalSlots) {
-    console.warn(
-      `[DomeGallery] Provided image count (${pool.length}) exceeds available tiles (${totalSlots}). Some images will not be shown.`,
-    );
-  }
-
-  const normalizedImages = pool.map((image) => {
-    if (typeof image === "string") {
-      return { src: image, previewSrc: image, type: "image", alt: "" };
+    const totalSlots = coords.length;
+    if (pool.length === 0) {
+        return coords.map((c) => ({ ...c, src: "", alt: "" }));
     }
-    return {
-      src: image.src || "",
-      previewSrc: image.previewSrc || image.src || "",
-      type: image.type || "image",
-      alt: image.alt || "",
-      caption: image.caption || "",
-    };
-  });
+    if (pool.length > totalSlots) {
+        console.warn(`[DomeGallery] Provided image count (${pool.length}) exceeds available tiles (${totalSlots}). Some images will not be shown.`);
+    }
 
-  const usedImages = Array.from(
-    { length: totalSlots },
-    (_, i) => normalizedImages[i % normalizedImages.length],
-  );
-
-  for (let i = 1; i < usedImages.length; i++) {
-    if (usedImages[i].src === usedImages[i - 1].src) {
-      for (let j = i + 1; j < usedImages.length; j++) {
-        if (usedImages[j].src !== usedImages[i].src) {
-          const tmp = usedImages[i];
-          usedImages[i] = usedImages[j];
-          usedImages[j] = tmp;
-          break;
+    const normalizedImages = pool.map((image) => {
+        if (typeof image === "string") {
+            return { src: image, previewSrc: image, animatedPreviewSrc: "", type: "image", alt: "" };
         }
-      }
-    }
-  }
+        return {
+            src: image.src || "",
+            previewSrc: image.previewSrc || image.src || "",
+            animatedPreviewSrc: image.animatedPreviewSrc || "",
+            type: image.type || "image",
+            alt: image.alt || "",
+            caption: image.caption || "",
+        };
+    });
 
-  return coords.map((c, i) => ({
-    ...c,
-    src: usedImages[i].src,
-    previewSrc: usedImages[i].previewSrc,
-    type: usedImages[i].type,
-    alt: usedImages[i].alt,
-    caption: usedImages[i].caption,
-  }));
+    const usedImages = Array.from({ length: totalSlots }, (_, i) => normalizedImages[i % normalizedImages.length]);
+
+    for (let i = 1; i < usedImages.length; i++) {
+        if (usedImages[i].src === usedImages[i - 1].src) {
+            for (let j = i + 1; j < usedImages.length; j++) {
+                if (usedImages[j].src !== usedImages[i].src) {
+                    const tmp = usedImages[i];
+                    usedImages[i] = usedImages[j];
+                    usedImages[j] = tmp;
+                    break;
+                }
+            }
+        }
+    }
+
+    return coords.map((c, i) => ({
+        ...c,
+        src: usedImages[i].src,
+        previewSrc: usedImages[i].previewSrc,
+        animatedPreviewSrc: usedImages[i].animatedPreviewSrc,
+        type: usedImages[i].type,
+        alt: usedImages[i].alt,
+        caption: usedImages[i].caption,
+    }));
 }
 
 function computeItemBaseRotation(offsetX, offsetY, sizeX, sizeY, segments) {
-  const unit = 360 / segments / 2;
-  const rotateY = unit * (offsetX + (sizeX - 1) / 2);
-  const rotateX = unit * (offsetY - (sizeY - 1) / 2);
-  return { rotateX, rotateY };
+    const unit = 360 / segments / 2;
+    const rotateY = unit * (offsetX + (sizeX - 1) / 2);
+    const rotateX = unit * (offsetY - (sizeY - 1) / 2);
+    return { rotateX, rotateY };
 }
 
 export default function DomeGallery({
-  images = DEFAULT_IMAGES,
-  fit = 1,
-  fitBasis = "auto",
-  minRadius = 600,
-  maxRadius = Infinity,
-  padFactor = 0.25,
-  overlayBlurColor = "#171717ff",
-  maxVerticalRotationDeg = DEFAULTS.maxVerticalRotationDeg,
-  dragSensitivity = DEFAULTS.dragSensitivity,
-  enlargeTransitionMs = DEFAULTS.enlargeTransitionMs,
-  segments = DEFAULTS.segments,
-  dragDampening = 2,
-  openedImageWidth = "400px",
-  openedImageHeight = "400px",
-  imageBorderRadius = "30px",
-  openedImageBorderRadius = "30px",
-  grayscale = true,
-  interactive = true,
-  onLoad,
+    images = DEFAULT_IMAGES,
+    fit = 1,
+    fitBasis = "auto",
+    minRadius = 600,
+    maxRadius = Infinity,
+    padFactor = 0.25,
+    overlayBlurColor = "#171717ff",
+    maxVerticalRotationDeg = DEFAULTS.maxVerticalRotationDeg,
+    dragSensitivity = DEFAULTS.dragSensitivity,
+    enlargeTransitionMs = DEFAULTS.enlargeTransitionMs,
+    segments = DEFAULTS.segments,
+    dragDampening = 2,
+    openedImageWidth = "400px",
+    openedImageHeight = "400px",
+    imageBorderRadius = "30px",
+    openedImageBorderRadius = "30px",
+    grayscale = true,
+    interactive = true,
+    onLoad,
 }) {
-  const rootRef = useRef(null);
-  const mainRef = useRef(null);
-  const sphereRef = useRef(null);
-  const frameRef = useRef(null);
-  const viewerRef = useRef(null);
-  const scrimRef = useRef(null);
-  const focusedElRef = useRef(null);
-  const originalTilePositionRef = useRef(null);
+    const rootRef = useRef(null);
+    const mainRef = useRef(null);
+    const sphereRef = useRef(null);
+    const frameRef = useRef(null);
+    const viewerRef = useRef(null);
+    const scrimRef = useRef(null);
+    const focusedElRef = useRef(null);
+    const originalTilePositionRef = useRef(null);
 
-  const rotationRef = useRef({ x: 0, y: 0 });
-  const startRotRef = useRef({ x: 0, y: 0 });
-  const startPosRef = useRef(null);
-  const draggingRef = useRef(false);
+    const rotationRef = useRef({ x: 0, y: 0 });
+    const startRotRef = useRef({ x: 0, y: 0 });
+    const startPosRef = useRef(null);
+    const draggingRef = useRef(false);
 
-  // Responsive segments state
-  const [currentSegments, setCurrentSegments] = useState(segments);
+    // Responsive segments state
+    const [currentSegments, setCurrentSegments] = useState(segments);
 
-  useEffect(() => {
-    const handleResize = () => {
-      const isDesktop = window.innerWidth >= 1024;
-      setCurrentSegments(isDesktop ? 30 : 30);
-    };
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-  const cancelTapRef = useRef(false);
-  const movedRef = useRef(false);
-  const inertiaRAF = useRef(null);
-  const pointerTypeRef = useRef("mouse");
-  const tapTargetRef = useRef(null);
-  const openingRef = useRef(false);
-  const openStartedAtRef = useRef(0);
-  const lastDragEndAt = useRef(0);
+    useEffect(() => {
+        const handleResize = () => {
+            const isDesktop = window.innerWidth >= 1024;
+            setCurrentSegments(isDesktop ? 30 : 30);
+        };
+        handleResize();
+        window.addEventListener("resize", handleResize);
+        return () => window.removeEventListener("resize", handleResize);
+    }, []);
+    const cancelTapRef = useRef(false);
+    const movedRef = useRef(false);
+    const inertiaRAF = useRef(null);
+    const pointerTypeRef = useRef("mouse");
+    const tapTargetRef = useRef(null);
+    const openingRef = useRef(false);
+    const openStartedAtRef = useRef(0);
+    const lastDragEndAt = useRef(0);
 
-  const scrollLockedRef = useRef(false);
-  const lockScroll = useCallback(() => {
-    if (scrollLockedRef.current) return;
-    scrollLockedRef.current = true;
-    document.body.classList.add("dg-scroll-lock");
-  }, []);
-  const unlockScroll = useCallback(() => {
-    if (!scrollLockedRef.current) return;
-    if (rootRef.current?.getAttribute("data-enlarging") === "true") return;
-    scrollLockedRef.current = false;
-    document.body.classList.remove("dg-scroll-lock");
-  }, []);
+    const scrollLockedRef = useRef(false);
+    const lockScroll = useCallback(() => {
+        if (scrollLockedRef.current) return;
+        scrollLockedRef.current = true;
+        document.body.classList.add("dg-scroll-lock");
+    }, []);
+    const unlockScroll = useCallback(() => {
+        if (!scrollLockedRef.current) return;
+        if (rootRef.current?.getAttribute("data-enlarging") === "true") return;
+        scrollLockedRef.current = false;
+        document.body.classList.remove("dg-scroll-lock");
+    }, []);
 
-  const items = useMemo(
-    () => buildItems(images, currentSegments),
-    [images, currentSegments],
-  );
+    const items = useMemo(() => buildItems(images, currentSegments), [images, currentSegments]);
 
-  const applyTransform = (xDeg, yDeg) => {
-    const el = sphereRef.current;
-    if (el) {
-      el.style.transform = `translateZ(calc(var(--radius) * -1)) rotateX(${xDeg}deg) rotateY(${yDeg}deg)`;
-    }
-  };
+    // Angle-based video culling: only play videos on tiles facing the camera (within ±90°)
+    const videoSyncTimerRef = useRef(null);
 
-  const lockedRadiusRef = useRef(null);
+    const syncVideoPlayback = useCallback(
+        (yDeg) => {
+            const sphere = sphereRef.current;
+            if (!sphere) return;
 
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-    const ro = new ResizeObserver((entries) => {
-      const cr = entries[0].contentRect;
-      const w = Math.max(1, cr.width),
-        h = Math.max(1, cr.height);
-      const minDim = Math.min(w, h),
-        maxDim = Math.max(w, h),
-        aspect = w / h;
-      let basis;
-      switch (fitBasis) {
-        case "min":
-          basis = minDim;
-          break;
-        case "max":
-          basis = maxDim;
-          break;
-        case "width":
-          basis = w;
-          break;
-        case "height":
-          basis = h;
-          break;
-        default:
-          basis = aspect >= 1.3 ? w : minDim;
-      }
-      let radius = basis * fit;
-      const heightGuard = h * 1.35;
-      radius = Math.min(radius, heightGuard);
+            const unit = 360 / currentSegments / 2;
+            const videoItems = sphere.querySelectorAll('.sphere-item[data-type="video"]');
 
-      radius = clamp(radius, minRadius, maxRadius);
-      lockedRadiusRef.current = Math.round(radius);
+            videoItems.forEach((item) => {
+                const offsetX = parseFloat(item.dataset.offsetX);
+                const sizeX = parseFloat(item.dataset.sizeX) || 2;
+                const tileBaseRotY = unit * (offsetX + (sizeX - 1) / 2);
+                const worldAngle = tileBaseRotY + yDeg;
+                // Normalize to -180..180
+                const normalized = (((worldAngle % 360) + 360 + 180) % 360) - 180;
+                const isFacing = Math.abs(normalized) < 90;
 
-      const viewerPad = Math.max(8, Math.round(minDim * padFactor));
-      root.style.setProperty("--radius", `${lockedRadiusRef.current}px`);
-      root.style.setProperty("--viewer-pad", `${viewerPad}px`);
-      root.style.setProperty("--overlay-blur-color", overlayBlurColor);
-      root.style.setProperty("--tile-radius", imageBorderRadius);
-      root.style.setProperty("--enlarge-radius", openedImageBorderRadius);
-      root.style.setProperty(
-        "--image-filter",
-        grayscale ? "grayscale(1)" : "none",
-      );
-      applyTransform(rotationRef.current.x, rotationRef.current.y);
+                const imageDiv = item.querySelector(".item__image");
+                if (!imageDiv) return;
 
-      const enlargedOverlay = viewerRef.current?.querySelector(".enlarge");
-      if (enlargedOverlay && frameRef.current && mainRef.current) {
-        const frameR = frameRef.current.getBoundingClientRect();
-        const mainR = mainRef.current.getBoundingClientRect();
+                const existingVideo = imageDiv.querySelector("video");
 
-        const hasCustomSize = openedImageWidth && openedImageHeight;
-        if (hasCustomSize) {
-          const tempDiv = document.createElement("div");
-          tempDiv.style.cssText = `position: absolute; width: ${openedImageWidth}; height: ${openedImageHeight}; visibility: hidden;`;
-          document.body.appendChild(tempDiv);
-          const tempRect = tempDiv.getBoundingClientRect();
-          document.body.removeChild(tempDiv);
+                if (isFacing && !existingVideo) {
+                    const animatedSrc = item.dataset.animatedPreviewSrc;
+                    if (!animatedSrc) return;
 
-          const centeredLeft =
-            frameR.left - mainR.left + (frameR.width - tempRect.width) / 2;
-          const centeredTop =
-            frameR.top - mainR.top + (frameR.height - tempRect.height) / 2;
+                    const video = document.createElement("video");
+                    video.src = animatedSrc;
+                    video.autoplay = true;
+                    video.loop = true;
+                    video.muted = true;
+                    video.playsInline = true;
+                    video.setAttribute("playsinline", "");
+                    video.setAttribute("webkit-playsinline", "");
+                    video.style.cssText = `
+                        position: absolute; inset: 0; width: 100%; height: 100%;
+                        object-fit: cover; z-index: 1; pointer-events: none;
+                        filter: var(--image-filter, none);
+                    `;
+                    imageDiv.appendChild(video);
+                    video.play().catch(() => {}); // Ignore autoplay rejections
+                } else if (!isFacing && existingVideo) {
+                    existingVideo.pause();
+                    existingVideo.removeAttribute("src");
+                    existingVideo.load(); // Release network resources
+                    existingVideo.remove();
+                }
+            });
+        },
+        [currentSegments],
+    );
 
-          enlargedOverlay.style.left = `${centeredLeft}px`;
-          enlargedOverlay.style.top = `${centeredTop}px`;
-        } else {
-          enlargedOverlay.style.left = `${frameR.left - mainR.left}px`;
-          enlargedOverlay.style.top = `${frameR.top - mainR.top}px`;
-          enlargedOverlay.style.width = `${frameR.width}px`;
-          enlargedOverlay.style.height = `${frameR.height}px`;
-        }
-      }
-    });
-    ro.observe(root);
-    return () => ro.disconnect();
-  }, [
-    fit,
-    fitBasis,
-    minRadius,
-    maxRadius,
-    padFactor,
-    overlayBlurColor,
-    grayscale,
-    imageBorderRadius,
-    openedImageBorderRadius,
-    openedImageWidth,
-    openedImageHeight,
-  ]);
-
-  useEffect(() => {
-    applyTransform(rotationRef.current.x, rotationRef.current.y);
-    onLoad?.();
-  }, []);
-
-  const stopInertia = useCallback(() => {
-    if (inertiaRAF.current) {
-      cancelAnimationFrame(inertiaRAF.current);
-      inertiaRAF.current = null;
-    }
-  }, []);
-
-  const startInertia = useCallback(
-    (vx, vy) => {
-      const MAX_V = 1.4;
-      let vX = clamp(vx, -MAX_V, MAX_V) * 80;
-      let vY = clamp(vy, -MAX_V, MAX_V) * 80;
-      let frames = 0;
-      const d = clamp(dragDampening ?? 0.6, 0, 1);
-      const frictionMul = 0.94 + 0.055 * d;
-      const stopThreshold = 0.015 - 0.01 * d;
-      const maxFrames = Math.round(90 + 270 * d);
-      const step = () => {
-        vX *= frictionMul;
-        vY *= frictionMul;
-        if (Math.abs(vX) < stopThreshold && Math.abs(vY) < stopThreshold) {
-          inertiaRAF.current = null;
-          return;
-        }
-        if (++frames > maxFrames) {
-          inertiaRAF.current = null;
-          return;
-        }
-        const nextX = clamp(
-          rotationRef.current.x - vY / 200,
-          -maxVerticalRotationDeg,
-          maxVerticalRotationDeg,
-        );
-        const nextY = wrapAngleSigned(rotationRef.current.y + vX / 200);
-        rotationRef.current = { x: nextX, y: nextY };
-        applyTransform(nextX, nextY);
-        inertiaRAF.current = requestAnimationFrame(step);
-      };
-      stopInertia();
-      inertiaRAF.current = requestAnimationFrame(step);
-    },
-    [dragDampening, maxVerticalRotationDeg, stopInertia],
-  );
-
-  useGesture(
-    {
-      onDragStart: ({ event }) => {
-        if (focusedElRef.current) return;
-        stopInertia();
-
-        pointerTypeRef.current = event.pointerType || "mouse";
-        if (pointerTypeRef.current === "touch") event.preventDefault();
-        if (pointerTypeRef.current === "touch") lockScroll();
-        draggingRef.current = true;
-        cancelTapRef.current = false;
-        movedRef.current = false;
-        startRotRef.current = { ...rotationRef.current };
-        startPosRef.current = { x: event.clientX, y: event.clientY };
-        const potential = event.target.closest?.(".item__image");
-        tapTargetRef.current = potential || null;
-      },
-      onDrag: ({
-        event,
-        last,
-        velocity: velArr = [0, 0],
-        direction: dirArr = [0, 0],
-        movement,
-      }) => {
-        if (
-          focusedElRef.current ||
-          !draggingRef.current ||
-          !startPosRef.current
-        )
-          return;
-
-        if (pointerTypeRef.current === "touch") event.preventDefault();
-
-        const dxTotal = event.clientX - startPosRef.current.x;
-        const dyTotal = event.clientY - startPosRef.current.y;
-
-        if (!movedRef.current) {
-          const dist2 = dxTotal * dxTotal + dyTotal * dyTotal;
-          if (dist2 > 16) movedRef.current = true;
-        }
-
-        const nextX = clamp(
-          startRotRef.current.x - dyTotal / dragSensitivity,
-          -maxVerticalRotationDeg,
-          maxVerticalRotationDeg,
-        );
-        const nextY = startRotRef.current.y + dxTotal / dragSensitivity;
-
-        const cur = rotationRef.current;
-        if (cur.x !== nextX || cur.y !== nextY) {
-          rotationRef.current = { x: nextX, y: nextY };
-          applyTransform(nextX, nextY);
-        }
-
-        if (last) {
-          draggingRef.current = false;
-          let isTap = false;
-
-          if (startPosRef.current) {
-            const dx = event.clientX - startPosRef.current.x;
-            const dy = event.clientY - startPosRef.current.y;
-            const dist2 = dx * dx + dy * dy;
-            const TAP_THRESH_PX = pointerTypeRef.current === "touch" ? 10 : 6;
-            if (dist2 <= TAP_THRESH_PX * TAP_THRESH_PX) {
-              isTap = true;
+    // Throttled wrapper — runs at most every 200ms to avoid DOM thrashing during fast rotations
+    const scheduleSyncRef = useRef((yDeg) => {});
+    useEffect(() => {
+        scheduleSyncRef.current = (yDeg) => {
+            if (videoSyncTimerRef.current) return; // Already scheduled
+            videoSyncTimerRef.current = setTimeout(() => {
+                videoSyncTimerRef.current = null;
+                syncVideoPlayback(yDeg);
+            }, 200);
+        };
+        return () => {
+            if (videoSyncTimerRef.current) {
+                clearTimeout(videoSyncTimerRef.current);
+                videoSyncTimerRef.current = null;
             }
-          }
+        };
+    }, [syncVideoPlayback]);
 
-          let [vMagX, vMagY] = velArr;
-          const [dirX, dirY] = dirArr;
-          let vx = vMagX * dirX;
-          let vy = vMagY * dirY;
-
-          if (
-            !isTap &&
-            Math.abs(vx) < 0.001 &&
-            Math.abs(vy) < 0.001 &&
-            Array.isArray(movement)
-          ) {
-            const [mx, my] = movement;
-            vx = (mx / dragSensitivity) * 0.02;
-            vy = (my / dragSensitivity) * 0.02;
-          }
-
-          if (!isTap && (Math.abs(vx) > 0.005 || Math.abs(vy) > 0.005)) {
-            startInertia(vx, vy);
-          }
-          startPosRef.current = null;
-          cancelTapRef.current = !isTap;
-
-          if (isTap && tapTargetRef.current && !focusedElRef.current) {
-            openItemFromElement(tapTargetRef.current);
-          }
-          tapTargetRef.current = null;
-
-          if (cancelTapRef.current)
-            setTimeout(() => (cancelTapRef.current = false), 120);
-          if (movedRef.current) lastDragEndAt.current = performance.now();
-          movedRef.current = false;
-          if (pointerTypeRef.current === "touch") unlockScroll();
+    const applyTransform = (xDeg, yDeg) => {
+        const el = sphereRef.current;
+        if (el) {
+            el.style.transform = `translateZ(calc(var(--radius) * -1)) rotateX(${xDeg}deg) rotateY(${yDeg}deg)`;
         }
-      },
-    },
-    { target: mainRef, eventOptions: { passive: false }, enabled: interactive },
-  );
+        scheduleSyncRef.current(yDeg);
+    };
 
-  useEffect(() => {
-    const scrim = scrimRef.current;
-    if (!scrim) return;
+    const lockedRadiusRef = useRef(null);
 
-    const close = () => {
-      if (performance.now() - openStartedAtRef.current < 250) return;
-      const el = focusedElRef.current;
-      if (!el) return;
-      const parent = el.parentElement;
-      const overlay = viewerRef.current?.querySelector(".enlarge");
-      if (!overlay) return;
+    useEffect(() => {
+        const root = rootRef.current;
+        if (!root) return;
+        const ro = new ResizeObserver((entries) => {
+            const cr = entries[0].contentRect;
+            const w = Math.max(1, cr.width),
+                h = Math.max(1, cr.height);
+            const minDim = Math.min(w, h),
+                maxDim = Math.max(w, h),
+                aspect = w / h;
+            let basis;
+            switch (fitBasis) {
+                case "min":
+                    basis = minDim;
+                    break;
+                case "max":
+                    basis = maxDim;
+                    break;
+                case "width":
+                    basis = w;
+                    break;
+                case "height":
+                    basis = h;
+                    break;
+                default:
+                    basis = aspect >= 1.3 ? w : minDim;
+            }
+            let radius = basis * fit;
+            const heightGuard = h * 1.35;
+            radius = Math.min(radius, heightGuard);
 
-      const refDiv = parent.querySelector(".item__image--reference");
+            radius = clamp(radius, minRadius, maxRadius);
+            lockedRadiusRef.current = Math.round(radius);
 
-      const originalPos = originalTilePositionRef.current;
-      if (!originalPos) {
-        overlay.remove();
-        if (refDiv) refDiv.remove();
-        parent.style.setProperty("--rot-y-delta", `0deg`);
-        parent.style.setProperty("--rot-x-delta", `0deg`);
-        el.style.visibility = "";
-        el.style.zIndex = 0;
-        focusedElRef.current = null;
-        rootRef.current?.removeAttribute("data-enlarging");
-        openingRef.current = false;
-        return;
-      }
+            const viewerPad = Math.max(8, Math.round(minDim * padFactor));
+            root.style.setProperty("--radius", `${lockedRadiusRef.current}px`);
+            root.style.setProperty("--viewer-pad", `${viewerPad}px`);
+            root.style.setProperty("--overlay-blur-color", overlayBlurColor);
+            root.style.setProperty("--tile-radius", imageBorderRadius);
+            root.style.setProperty("--enlarge-radius", openedImageBorderRadius);
+            root.style.setProperty("--image-filter", grayscale ? "grayscale(1)" : "none");
+            applyTransform(rotationRef.current.x, rotationRef.current.y);
 
-      const currentRect = overlay.getBoundingClientRect();
-      const rootRect = rootRef.current.getBoundingClientRect();
+            const enlargedOverlay = viewerRef.current?.querySelector(".enlarge");
+            if (enlargedOverlay && frameRef.current && mainRef.current) {
+                const frameR = frameRef.current.getBoundingClientRect();
+                const mainR = mainRef.current.getBoundingClientRect();
 
-      // Calculate current relative position (start of animation)
-      const startRel = {
-        left: currentRect.left - rootRect.left,
-        top: currentRect.top - rootRect.top,
-        width: currentRect.width,
-        height: currentRect.height,
-      };
+                const hasCustomSize = openedImageWidth && openedImageHeight;
+                if (hasCustomSize) {
+                    const tempDiv = document.createElement("div");
+                    tempDiv.style.cssText = `position: absolute; width: ${openedImageWidth}; height: ${openedImageHeight}; visibility: hidden;`;
+                    document.body.appendChild(tempDiv);
+                    const tempRect = tempDiv.getBoundingClientRect();
+                    document.body.removeChild(tempDiv);
 
-      // Calculate target relative position (original tile)
-      const targetRel = {
-        left: originalPos.left - rootRect.left,
-        top: originalPos.top - rootRect.top,
-        width: originalPos.width,
-        height: originalPos.height,
-      };
+                    const centeredLeft = frameR.left - mainR.left + (frameR.width - tempRect.width) / 2;
+                    const centeredTop = frameR.top - mainR.top + (frameR.height - tempRect.height) / 2;
 
-      const animatingOverlay = document.createElement("div");
-      animatingOverlay.className = "enlarge-closing";
-      // Set initial state to match the current expanded overlay
-      animatingOverlay.style.cssText = `
+                    enlargedOverlay.style.left = `${centeredLeft}px`;
+                    enlargedOverlay.style.top = `${centeredTop}px`;
+                } else {
+                    enlargedOverlay.style.left = `${frameR.left - mainR.left}px`;
+                    enlargedOverlay.style.top = `${frameR.top - mainR.top}px`;
+                    enlargedOverlay.style.width = `${frameR.width}px`;
+                    enlargedOverlay.style.height = `${frameR.height}px`;
+                }
+            }
+        });
+        ro.observe(root);
+        return () => ro.disconnect();
+    }, [fit, fitBasis, minRadius, maxRadius, padFactor, overlayBlurColor, grayscale, imageBorderRadius, openedImageBorderRadius, openedImageWidth, openedImageHeight]);
+
+    useEffect(() => {
+        applyTransform(rotationRef.current.x, rotationRef.current.y);
+        onLoad?.();
+    }, []);
+
+    const stopInertia = useCallback(() => {
+        if (inertiaRAF.current) {
+            cancelAnimationFrame(inertiaRAF.current);
+            inertiaRAF.current = null;
+        }
+    }, []);
+
+    const startInertia = useCallback(
+        (vx, vy) => {
+            const MAX_V = 1.4;
+            let vX = clamp(vx, -MAX_V, MAX_V) * 80;
+            let vY = clamp(vy, -MAX_V, MAX_V) * 80;
+            let frames = 0;
+            const d = clamp(dragDampening ?? 0.6, 0, 1);
+            const frictionMul = 0.94 + 0.055 * d;
+            const stopThreshold = 0.015 - 0.01 * d;
+            const maxFrames = Math.round(90 + 270 * d);
+            const step = () => {
+                vX *= frictionMul;
+                vY *= frictionMul;
+                if (Math.abs(vX) < stopThreshold && Math.abs(vY) < stopThreshold) {
+                    inertiaRAF.current = null;
+                    return;
+                }
+                if (++frames > maxFrames) {
+                    inertiaRAF.current = null;
+                    return;
+                }
+                const nextX = clamp(rotationRef.current.x - vY / 200, -maxVerticalRotationDeg, maxVerticalRotationDeg);
+                const nextY = wrapAngleSigned(rotationRef.current.y + vX / 200);
+                rotationRef.current = { x: nextX, y: nextY };
+                applyTransform(nextX, nextY);
+                inertiaRAF.current = requestAnimationFrame(step);
+            };
+            stopInertia();
+            inertiaRAF.current = requestAnimationFrame(step);
+        },
+        [dragDampening, maxVerticalRotationDeg, stopInertia],
+    );
+
+    useGesture(
+        {
+            onDragStart: ({ event }) => {
+                if (focusedElRef.current) return;
+                stopInertia();
+
+                pointerTypeRef.current = event.pointerType || "mouse";
+                if (pointerTypeRef.current === "touch") event.preventDefault();
+                if (pointerTypeRef.current === "touch") lockScroll();
+                draggingRef.current = true;
+                cancelTapRef.current = false;
+                movedRef.current = false;
+                startRotRef.current = { ...rotationRef.current };
+                startPosRef.current = { x: event.clientX, y: event.clientY };
+                const potential = event.target.closest?.(".item__image");
+                tapTargetRef.current = potential || null;
+            },
+            onDrag: ({ event, last, velocity: velArr = [0, 0], direction: dirArr = [0, 0], movement }) => {
+                if (focusedElRef.current || !draggingRef.current || !startPosRef.current) return;
+
+                if (pointerTypeRef.current === "touch") event.preventDefault();
+
+                const dxTotal = event.clientX - startPosRef.current.x;
+                const dyTotal = event.clientY - startPosRef.current.y;
+
+                if (!movedRef.current) {
+                    const dist2 = dxTotal * dxTotal + dyTotal * dyTotal;
+                    if (dist2 > 16) movedRef.current = true;
+                }
+
+                const nextX = clamp(startRotRef.current.x - dyTotal / dragSensitivity, -maxVerticalRotationDeg, maxVerticalRotationDeg);
+                const nextY = startRotRef.current.y + dxTotal / dragSensitivity;
+
+                const cur = rotationRef.current;
+                if (cur.x !== nextX || cur.y !== nextY) {
+                    rotationRef.current = { x: nextX, y: nextY };
+                    applyTransform(nextX, nextY);
+                }
+
+                if (last) {
+                    draggingRef.current = false;
+                    let isTap = false;
+
+                    if (startPosRef.current) {
+                        const dx = event.clientX - startPosRef.current.x;
+                        const dy = event.clientY - startPosRef.current.y;
+                        const dist2 = dx * dx + dy * dy;
+                        const TAP_THRESH_PX = pointerTypeRef.current === "touch" ? 10 : 6;
+                        if (dist2 <= TAP_THRESH_PX * TAP_THRESH_PX) {
+                            isTap = true;
+                        }
+                    }
+
+                    let [vMagX, vMagY] = velArr;
+                    const [dirX, dirY] = dirArr;
+                    let vx = vMagX * dirX;
+                    let vy = vMagY * dirY;
+
+                    if (!isTap && Math.abs(vx) < 0.001 && Math.abs(vy) < 0.001 && Array.isArray(movement)) {
+                        const [mx, my] = movement;
+                        vx = (mx / dragSensitivity) * 0.02;
+                        vy = (my / dragSensitivity) * 0.02;
+                    }
+
+                    if (!isTap && (Math.abs(vx) > 0.005 || Math.abs(vy) > 0.005)) {
+                        startInertia(vx, vy);
+                    }
+                    startPosRef.current = null;
+                    cancelTapRef.current = !isTap;
+
+                    if (isTap && tapTargetRef.current && !focusedElRef.current) {
+                        openItemFromElement(tapTargetRef.current);
+                    }
+                    tapTargetRef.current = null;
+
+                    if (cancelTapRef.current) setTimeout(() => (cancelTapRef.current = false), 120);
+                    if (movedRef.current) lastDragEndAt.current = performance.now();
+                    movedRef.current = false;
+                    if (pointerTypeRef.current === "touch") unlockScroll();
+                }
+            },
+        },
+        { target: mainRef, eventOptions: { passive: false }, enabled: interactive },
+    );
+
+    useEffect(() => {
+        const scrim = scrimRef.current;
+        if (!scrim) return;
+
+        const close = () => {
+            if (performance.now() - openStartedAtRef.current < 250) return;
+            const el = focusedElRef.current;
+            if (!el) return;
+            const parent = el.parentElement;
+            const overlay = viewerRef.current?.querySelector(".enlarge");
+            if (!overlay) return;
+
+            const refDiv = parent.querySelector(".item__image--reference");
+
+            const originalPos = originalTilePositionRef.current;
+            if (!originalPos) {
+                overlay.remove();
+                if (refDiv) refDiv.remove();
+                parent.style.setProperty("--rot-y-delta", `0deg`);
+                parent.style.setProperty("--rot-x-delta", `0deg`);
+                el.style.visibility = "";
+                el.style.zIndex = 0;
+                focusedElRef.current = null;
+                rootRef.current?.removeAttribute("data-enlarging");
+                openingRef.current = false;
+                return;
+            }
+
+            const currentRect = overlay.getBoundingClientRect();
+            const rootRect = rootRef.current.getBoundingClientRect();
+
+            // Calculate current relative position (start of animation)
+            const startRel = {
+                left: currentRect.left - rootRect.left,
+                top: currentRect.top - rootRect.top,
+                width: currentRect.width,
+                height: currentRect.height,
+            };
+
+            // Calculate target relative position (original tile)
+            const targetRel = {
+                left: originalPos.left - rootRect.left,
+                top: originalPos.top - rootRect.top,
+                width: originalPos.width,
+                height: originalPos.height,
+            };
+
+            const animatingOverlay = document.createElement("div");
+            animatingOverlay.className = "enlarge-closing";
+            // Set initial state to match the current expanded overlay
+            animatingOverlay.style.cssText = `
         position: absolute;
         left: ${startRel.left}px;
         top: ${startRel.top}px;
@@ -489,293 +515,282 @@ export default function DomeGallery({
         box-sizing: border-box;
         padding: 30px;
       `;
-      const originalMedia = overlay.querySelector("img, video");
-      if (originalMedia) {
-        const mediaCopy = originalMedia.cloneNode();
-        if (mediaCopy.tagName.toLowerCase() === "video") {
-          mediaCopy.removeAttribute("controls");
-          mediaCopy.pause();
-        }
-        mediaCopy.style.cssText = `width: 100%; height: 100%; object-fit: cover; border-radius: ${openedImageBorderRadius}; filter: ${grayscale ? "grayscale(1)" : "none"};`;
-        animatingOverlay.appendChild(mediaCopy);
-      }
+            const originalMedia = overlay.querySelector("img, video");
+            if (originalMedia) {
+                const mediaCopy = originalMedia.cloneNode();
+                if (mediaCopy.tagName.toLowerCase() === "video") {
+                    mediaCopy.removeAttribute("controls");
+                    mediaCopy.pause();
+                }
+                mediaCopy.style.cssText = `width: 100%; height: 100%; object-fit: cover; border-radius: ${openedImageBorderRadius}; filter: ${grayscale ? "grayscale(1)" : "none"};`;
+                animatingOverlay.appendChild(mediaCopy);
+            }
 
-      overlay.remove();
-      rootRef.current.appendChild(animatingOverlay);
+            overlay.remove();
+            rootRef.current.appendChild(animatingOverlay);
 
-      void animatingOverlay.getBoundingClientRect();
+            void animatingOverlay.getBoundingClientRect();
 
-      // Calculate transforms to map start -> target
-      const tx = targetRel.left - startRel.left;
-      const ty = targetRel.top - startRel.top;
-      const sx = targetRel.width / startRel.width;
-      const sy = targetRel.height / startRel.height;
-
-      requestAnimationFrame(() => {
-        animatingOverlay.style.transform = `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`;
-        animatingOverlay.style.opacity = "0";
-        animatingOverlay.style.padding = "0px";
-      });
-
-      const cleanup = () => {
-        animatingOverlay.remove();
-        originalTilePositionRef.current = null;
-
-        if (refDiv) refDiv.remove();
-        parent.style.transition = "none";
-        el.style.transition = "none";
-
-        parent.style.setProperty("--rot-y-delta", `0deg`);
-        parent.style.setProperty("--rot-x-delta", `0deg`);
-
-        requestAnimationFrame(() => {
-          el.style.visibility = "";
-          el.style.opacity = "0";
-          el.style.zIndex = 0;
-          focusedElRef.current = null;
-          rootRef.current?.removeAttribute("data-enlarging");
-
-          requestAnimationFrame(() => {
-            parent.style.transition = "";
-            el.style.transition = "opacity 300ms ease-out";
+            // Calculate transforms to map start -> target
+            const tx = targetRel.left - startRel.left;
+            const ty = targetRel.top - startRel.top;
+            const sx = targetRel.width / startRel.width;
+            const sy = targetRel.height / startRel.height;
 
             requestAnimationFrame(() => {
-              el.style.opacity = "1";
-              setTimeout(() => {
-                el.style.transition = "";
-                el.style.opacity = "";
-                openingRef.current = false;
-                if (
-                  !draggingRef.current &&
-                  rootRef.current?.getAttribute("data-enlarging") !== "true"
-                )
-                  document.body.classList.remove("dg-scroll-lock");
-              }, 300);
+                animatingOverlay.style.transform = `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`;
+                animatingOverlay.style.opacity = "0";
+                animatingOverlay.style.padding = "0px";
             });
-          });
-        });
-      };
 
-      animatingOverlay.addEventListener("transitionend", cleanup, {
-        once: true,
-      });
-    };
+            const cleanup = () => {
+                animatingOverlay.remove();
+                originalTilePositionRef.current = null;
 
-    scrim.addEventListener("click", close);
-    const onKey = (e) => {
-      if (e.key === "Escape") close();
-    };
-    window.addEventListener("keydown", onKey);
+                if (refDiv) refDiv.remove();
+                parent.style.transition = "none";
+                el.style.transition = "none";
 
-    return () => {
-      scrim.removeEventListener("click", close);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [enlargeTransitionMs, openedImageBorderRadius, grayscale]);
+                parent.style.setProperty("--rot-y-delta", `0deg`);
+                parent.style.setProperty("--rot-x-delta", `0deg`);
 
-  const openItemFromElement = (el) => {
-    if (openingRef.current) return;
-    openingRef.current = true;
-    openStartedAtRef.current = performance.now();
-    lockScroll();
-    const parent = el.parentElement;
-    focusedElRef.current = el;
-    el.setAttribute("data-focused", "true");
+                requestAnimationFrame(() => {
+                    el.style.visibility = "";
+                    el.style.opacity = "0";
+                    el.style.zIndex = 0;
+                    focusedElRef.current = null;
+                    rootRef.current?.removeAttribute("data-enlarging");
 
-    const offsetX = getDataNumber(parent, "offsetX", 0);
-    const offsetY = getDataNumber(parent, "offsetY", 0);
-    const sizeX = getDataNumber(parent, "sizeX", 2);
-    const sizeY = getDataNumber(parent, "sizeY", 2);
+                    requestAnimationFrame(() => {
+                        parent.style.transition = "";
+                        el.style.transition = "opacity 300ms ease-out";
 
-    const parentRot = computeItemBaseRotation(
-      offsetX,
-      offsetY,
-      sizeX,
-      sizeY,
-      currentSegments,
-    );
-    const parentY = normalizeAngle(parentRot.rotateY);
-    const globalY = normalizeAngle(rotationRef.current.y);
-    let rotY = -(parentY + globalY) % 360;
-    if (rotY < -180) rotY += 360;
-    const rotX = -parentRot.rotateX - rotationRef.current.x;
+                        requestAnimationFrame(() => {
+                            el.style.opacity = "1";
+                            setTimeout(() => {
+                                el.style.transition = "";
+                                el.style.opacity = "";
+                                openingRef.current = false;
+                                if (!draggingRef.current && rootRef.current?.getAttribute("data-enlarging") !== "true") document.body.classList.remove("dg-scroll-lock");
+                            }, 300);
+                        });
+                    });
+                });
+            };
 
-    parent.style.setProperty("--rot-y-delta", `${rotY}deg`);
-    parent.style.setProperty("--rot-x-delta", `${rotX}deg`);
+            animatingOverlay.addEventListener("transitionend", cleanup, {
+                once: true,
+            });
+        };
 
-    const refDiv = document.createElement("div");
-    refDiv.className = "item__image item__image--reference opacity-0";
-    refDiv.style.transform = `rotateX(${-parentRot.rotateX}deg) rotateY(${-parentRot.rotateY}deg)`;
-    parent.appendChild(refDiv);
+        scrim.addEventListener("click", close);
+        const onKey = (e) => {
+            if (e.key === "Escape") close();
+        };
+        window.addEventListener("keydown", onKey);
 
-    void refDiv.offsetHeight;
+        return () => {
+            scrim.removeEventListener("click", close);
+            window.removeEventListener("keydown", onKey);
+        };
+    }, [enlargeTransitionMs, openedImageBorderRadius, grayscale]);
 
-    const tileR = refDiv.getBoundingClientRect(); // Start Rect
-    const mainR = mainRef.current?.getBoundingClientRect();
-    const frameR = frameRef.current?.getBoundingClientRect();
+    const openItemFromElement = (el) => {
+        if (openingRef.current) return;
+        openingRef.current = true;
+        openStartedAtRef.current = performance.now();
+        lockScroll();
+        const parent = el.parentElement;
+        focusedElRef.current = el;
+        el.setAttribute("data-focused", "true");
 
-    if (!mainR || !frameR || tileR.width <= 0 || tileR.height <= 0) {
-      openingRef.current = false;
-      focusedElRef.current = null;
-      parent.removeChild(refDiv);
-      unlockScroll();
-      return;
-    }
+        const offsetX = getDataNumber(parent, "offsetX", 0);
+        const offsetY = getDataNumber(parent, "offsetY", 0);
+        const sizeX = getDataNumber(parent, "sizeX", 2);
+        const sizeY = getDataNumber(parent, "sizeY", 2);
 
-    originalTilePositionRef.current = {
-      left: tileR.left,
-      top: tileR.top,
-      width: tileR.width,
-      height: tileR.height,
-    };
+        const parentRot = computeItemBaseRotation(offsetX, offsetY, sizeX, sizeY, currentSegments);
+        const parentY = normalizeAngle(parentRot.rotateY);
+        const globalY = normalizeAngle(rotationRef.current.y);
+        let rotY = -(parentY + globalY) % 360;
+        if (rotY < -180) rotY += 360;
+        const rotX = -parentRot.rotateX - rotationRef.current.x;
 
-    el.style.visibility = "hidden";
-    el.style.zIndex = 0;
+        parent.style.setProperty("--rot-y-delta", `${rotY}deg`);
+        parent.style.setProperty("--rot-x-delta", `${rotX}deg`);
 
-    // Determine Final Target Geometry (Relative to mainR)
-    // Default to frameR
-    let finalW = frameR.width;
-    let finalH = frameR.height;
-    let finalTop = frameR.top - mainR.top;
-    let finalLeft = frameR.left - mainR.left;
+        const refDiv = document.createElement("div");
+        refDiv.className = "item__image item__image--reference opacity-0";
+        refDiv.style.transform = `rotateX(${-parentRot.rotateX}deg) rotateY(${-parentRot.rotateY}deg)`;
+        parent.appendChild(refDiv);
 
-    // If custom size is requested
-    if (openedImageWidth && openedImageHeight) {
-      const tempDiv = document.createElement("div");
-      tempDiv.style.cssText = `position: absolute; width: ${openedImageWidth}; height: ${openedImageHeight}; visibility: hidden;`;
-      document.body.appendChild(tempDiv);
-      const tempRect = tempDiv.getBoundingClientRect();
-      document.body.removeChild(tempDiv);
+        void refDiv.offsetHeight;
 
-      finalW = tempRect.width;
-      finalH = tempRect.height;
-      // Center it over the frame
-      finalLeft =
-        frameR.left - mainR.left + (frameR.width - tempRect.width) / 2;
-      finalTop = frameR.top - mainR.top + (frameR.height - tempRect.height) / 2;
-    }
+        const tileR = refDiv.getBoundingClientRect(); // Start Rect
+        const mainR = mainRef.current?.getBoundingClientRect();
+        const frameR = frameRef.current?.getBoundingClientRect();
 
-    const overlay = document.createElement("div");
-    overlay.className = "enlarge";
-    overlay.style.position = "absolute";
-    // Initialize at FINAL position/size
-    overlay.style.left = finalLeft + "px";
-    overlay.style.top = finalTop + "px";
-    overlay.style.width = finalW + "px";
-    overlay.style.height = finalH + "px";
-
-    overlay.style.opacity = "0";
-    overlay.style.zIndex = "30";
-    overlay.style.willChange = "transform, opacity";
-    overlay.style.transformOrigin = "top left";
-    // Use transform mostly
-    overlay.style.transition = `transform ${enlargeTransitionMs}ms cubic-bezier(0.2, 0, 0.2, 1), opacity ${enlargeTransitionMs}ms ease, padding ${enlargeTransitionMs}ms ease`;
-    overlay.style.borderRadius = openedImageBorderRadius;
-    overlay.style.overflow = "hidden";
-    overlay.style.boxSizing = "border-box";
-    overlay.style.padding = "0px";
-
-    // Calculate Start Transform (Tile -> Final)
-    // tileR is valid. finalW/H are valid.
-    const startTx = tileR.left - mainR.left - finalLeft;
-    const startTy = tileR.top - mainR.top - finalTop;
-    const startSx = tileR.width / finalW;
-    const startSy = tileR.height / finalH;
-
-    // Apply Start Transform immediately
-    overlay.style.transform = `translate(${startTx}px, ${startTy}px) scale(${startSx}, ${startSy})`;
-
-    const mediaType = parent.dataset.type || "image";
-    const fullSrc = parent.dataset.src || el.querySelector("img")?.src || "";
-    const rawAlt = parent.dataset.alt || el.querySelector("img")?.alt || "";
-    const smallSrc =
-      parent.dataset.previewSrc ||
-      el.querySelector("img")?.currentSrc ||
-      fullSrc;
-
-    let mediaEl;
-
-    if (mediaType === "video") {
-      mediaEl = document.createElement("video");
-      mediaEl.src = fullSrc;
-      mediaEl.poster = smallSrc;
-      mediaEl.controls = true;
-      mediaEl.autoplay = true;
-      mediaEl.loop = true;
-      mediaEl.playsInline = true;
-      mediaEl.style.width = "100%";
-      mediaEl.style.height = "100%";
-      mediaEl.style.objectFit = "cover";
-      mediaEl.style.borderRadius = openedImageBorderRadius;
-      mediaEl.style.filter = grayscale ? "grayscale(1)" : "none";
-      mediaEl.style.transition = "filter 0.3s ease";
-      overlay.appendChild(mediaEl);
-    } else {
-      mediaEl = document.createElement("img");
-      if (smallSrc) mediaEl.src = smallSrc;
-      else mediaEl.style.opacity = "0";
-      mediaEl.alt = rawAlt;
-      mediaEl.style.width = "100%";
-      mediaEl.style.height = "100%";
-      mediaEl.style.objectFit = "cover";
-      mediaEl.style.borderRadius = openedImageBorderRadius;
-      mediaEl.style.filter = grayscale ? "grayscale(1)" : "none";
-      mediaEl.style.transition = "filter 0.3s ease";
-      overlay.appendChild(mediaEl);
-    }
-
-    // Render Caption if available
-    const captionText = parent.dataset.caption;
-    if (captionText) {
-      const captionEl = document.createElement("div");
-      captionEl.innerText = captionText;
-      captionEl.style.position = "absolute";
-      captionEl.style.bottom = "0";
-      captionEl.style.left = "0";
-      captionEl.style.width = "100%";
-      captionEl.style.textShadow = "2px 2px 4px rgba(0, 0, 0, 0.6)";
-      captionEl.style.color = "white";
-      captionEl.style.fontFamily = "var(--font-spartan)";
-      captionEl.style.fontSize = "1rem";
-      captionEl.style.textAlign = "center";
-      captionEl.style.pointerEvents = "none";
-      captionEl.style.opacity = "0";
-      captionEl.style.transition = "opacity 0.5s ease 0.2s";
-      overlay.appendChild(captionEl);
-
-      requestAnimationFrame(() => {
-        captionEl.style.opacity = "1";
-      });
-    }
-
-    viewerRef.current.appendChild(overlay);
-
-    if (mediaType === "image" && fullSrc && fullSrc !== smallSrc) {
-      const highResImg = new window.Image();
-      highResImg.src = fullSrc;
-      highResImg.onload = () => {
-        if (mediaEl.parentNode) {
-          mediaEl.src = fullSrc;
+        if (!mainR || !frameR || tileR.width <= 0 || tileR.height <= 0) {
+            openingRef.current = false;
+            focusedElRef.current = null;
+            parent.removeChild(refDiv);
+            unlockScroll();
+            return;
         }
-      };
-    }
 
-    // Trigger animation to Identity
-    requestAnimationFrame(() => {
-      overlay.style.opacity = "1";
-      overlay.style.padding = "30px";
-      overlay.style.transform = "translate(0px, 0px) scale(1, 1)";
-      rootRef.current?.setAttribute("data-enlarging", "true");
-    });
-  };
+        originalTilePositionRef.current = {
+            left: tileR.left,
+            top: tileR.top,
+            width: tileR.width,
+            height: tileR.height,
+        };
 
-  useEffect(() => {
-    return () => {
-      document.body.classList.remove("dg-scroll-lock");
+        el.style.visibility = "hidden";
+        el.style.zIndex = 0;
+
+        // Determine Final Target Geometry (Relative to mainR)
+        // Default to frameR
+        let finalW = frameR.width;
+        let finalH = frameR.height;
+        let finalTop = frameR.top - mainR.top;
+        let finalLeft = frameR.left - mainR.left;
+
+        // If custom size is requested
+        if (openedImageWidth && openedImageHeight) {
+            const tempDiv = document.createElement("div");
+            tempDiv.style.cssText = `position: absolute; width: ${openedImageWidth}; height: ${openedImageHeight}; visibility: hidden;`;
+            document.body.appendChild(tempDiv);
+            const tempRect = tempDiv.getBoundingClientRect();
+            document.body.removeChild(tempDiv);
+
+            finalW = tempRect.width;
+            finalH = tempRect.height;
+            // Center it over the frame
+            finalLeft = frameR.left - mainR.left + (frameR.width - tempRect.width) / 2;
+            finalTop = frameR.top - mainR.top + (frameR.height - tempRect.height) / 2;
+        }
+
+        const overlay = document.createElement("div");
+        overlay.className = "enlarge";
+        overlay.style.position = "absolute";
+        // Initialize at FINAL position/size
+        overlay.style.left = finalLeft + "px";
+        overlay.style.top = finalTop + "px";
+        overlay.style.width = finalW + "px";
+        overlay.style.height = finalH + "px";
+
+        overlay.style.opacity = "0";
+        overlay.style.zIndex = "30";
+        overlay.style.pointerEvents = "auto";
+        overlay.style.willChange = "transform, opacity";
+        overlay.style.transformOrigin = "top left";
+        // Use transform mostly
+        overlay.style.transition = `transform ${enlargeTransitionMs}ms cubic-bezier(0.2, 0, 0.2, 1), opacity ${enlargeTransitionMs}ms ease, padding ${enlargeTransitionMs}ms ease`;
+        overlay.style.borderRadius = openedImageBorderRadius;
+        overlay.style.overflow = "hidden";
+        overlay.style.boxSizing = "border-box";
+        overlay.style.padding = "0px";
+
+        // Calculate Start Transform (Tile -> Final)
+        // tileR is valid. finalW/H are valid.
+        const startTx = tileR.left - mainR.left - finalLeft;
+        const startTy = tileR.top - mainR.top - finalTop;
+        const startSx = tileR.width / finalW;
+        const startSy = tileR.height / finalH;
+
+        // Apply Start Transform immediately
+        overlay.style.transform = `translate(${startTx}px, ${startTy}px) scale(${startSx}, ${startSy})`;
+
+        const mediaType = parent.dataset.type || "image";
+        const fullSrc = parent.dataset.src || el.querySelector("img")?.src || "";
+        const rawAlt = parent.dataset.alt || el.querySelector("img")?.alt || "";
+        const smallSrc = parent.dataset.previewSrc || el.querySelector("img")?.currentSrc || fullSrc;
+
+        let mediaEl;
+
+        if (mediaType === "video") {
+            mediaEl = document.createElement("video");
+            mediaEl.src = fullSrc;
+            mediaEl.poster = smallSrc;
+            mediaEl.controls = true;
+            mediaEl.autoplay = true;
+            mediaEl.loop = true;
+            mediaEl.playsInline = true;
+            mediaEl.style.width = "100%";
+            mediaEl.style.height = "100%";
+            mediaEl.style.objectFit = "cover";
+            mediaEl.style.borderRadius = openedImageBorderRadius;
+            mediaEl.style.filter = grayscale ? "grayscale(1)" : "none";
+            mediaEl.style.transition = "filter 0.3s ease";
+            overlay.appendChild(mediaEl);
+        } else {
+            mediaEl = document.createElement("img");
+            if (smallSrc) mediaEl.src = smallSrc;
+            else mediaEl.style.opacity = "0";
+            mediaEl.alt = rawAlt;
+            mediaEl.style.width = "100%";
+            mediaEl.style.height = "100%";
+            mediaEl.style.objectFit = "cover";
+            mediaEl.style.borderRadius = openedImageBorderRadius;
+            mediaEl.style.filter = grayscale ? "grayscale(1)" : "none";
+            mediaEl.style.transition = "filter 0.3s ease";
+            overlay.appendChild(mediaEl);
+        }
+
+        // Render Caption if available
+        const captionText = parent.dataset.caption;
+        if (captionText) {
+            const captionEl = document.createElement("div");
+            captionEl.innerText = captionText;
+            captionEl.style.position = "absolute";
+            captionEl.style.bottom = "0";
+            captionEl.style.left = "0";
+            captionEl.style.width = "100%";
+            captionEl.style.textShadow = "2px 2px 4px rgba(0, 0, 0, 0.6)";
+            captionEl.style.color = "white";
+            captionEl.style.fontFamily = "var(--font-spartan)";
+            captionEl.style.fontSize = "1rem";
+            captionEl.style.textAlign = "center";
+            captionEl.style.pointerEvents = "none";
+            captionEl.style.opacity = "0";
+            captionEl.style.transition = "opacity 0.5s ease 0.2s";
+            overlay.appendChild(captionEl);
+
+            requestAnimationFrame(() => {
+                captionEl.style.opacity = "1";
+            });
+        }
+
+        // Prevent clicks on the overlay/video controls from closing the viewer
+        overlay.addEventListener("click", (e) => e.stopPropagation());
+        viewerRef.current.appendChild(overlay);
+
+        if (mediaType === "image" && fullSrc && fullSrc !== smallSrc) {
+            const highResImg = new window.Image();
+            highResImg.src = fullSrc;
+            highResImg.onload = () => {
+                if (mediaEl.parentNode) {
+                    mediaEl.src = fullSrc;
+                }
+            };
+        }
+
+        // Trigger animation to Identity
+        requestAnimationFrame(() => {
+            overlay.style.opacity = "1";
+            overlay.style.padding = "30px";
+            overlay.style.transform = "translate(0px, 0px) scale(1, 1)";
+            rootRef.current?.setAttribute("data-enlarging", "true");
+        });
     };
-  }, []);
 
-  const cssStyles = `
+    useEffect(() => {
+        return () => {
+            document.body.classList.remove("dg-scroll-lock");
+        };
+    }, []);
+
+    const cssStyles = `
     .sphere-root {
       --radius: 520px;
       --viewer-pad: 72px;
@@ -881,157 +896,160 @@ export default function DomeGallery({
     }
   `;
 
-  return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: cssStyles }} />
-      <div
-        ref={rootRef}
-        className="sphere-root relative w-full h-full bg-black"
-        data-interactive={interactive}
-        style={{
-          ["--segments-x"]: currentSegments,
-          ["--segments-y"]: currentSegments,
-          ["--overlay-blur-color"]: overlayBlurColor,
-          ["--tile-radius"]: imageBorderRadius,
-          ["--enlarge-radius"]: openedImageBorderRadius,
-          ["--image-filter"]: grayscale ? "grayscale(1)" : "none",
-          touchAction: "none",
-          overscrollBehavior: "none",
-        }}
-      >
-        <main
-          ref={mainRef}
-          className="absolute inset-0 grid place-items-center overflow-hidden select-none bg-transparent"
-          style={{
-            touchAction: "none",
-            WebkitUserSelect: "none",
-          }}
-        >
-          <div className="stage">
-            <div ref={sphereRef} className="sphere">
-              {items.map((it, i) => (
-                <div
-                  key={`${it.x},${it.y},${i}`}
-                  className="sphere-item absolute m-auto"
-                  data-src={it.src}
-                  data-preview-src={it.previewSrc}
-                  data-type={it.type}
-                  data-alt={it.alt}
-                  data-caption={it.caption}
-                  data-offset-x={it.x}
-                  data-offset-y={it.y}
-                  data-size-x={it.sizeX}
-                  data-size-y={it.sizeY}
-                  style={{
-                    ["--offset-x"]: it.x,
-                    ["--offset-y"]: it.y,
-                    ["--item-size-x"]: it.sizeX,
-                    ["--item-size-y"]: it.sizeY,
-                    top: "-999px",
-                    bottom: "-999px",
-                    left: "-999px",
-                    right: "-999px",
-                  }}
-                >
-                  <div
-                    className="item__image absolute block overflow-hidden cursor-pointer bg-neutral-900 transition-transform duration-300 group"
-                    role="button"
-                    tabIndex={0}
-                    aria-label={it.alt || "Open image"}
-                    onClick={(e) => {
-                      if (draggingRef.current) return;
-                      if (movedRef.current) return;
-                      if (performance.now() - lastDragEndAt.current < 80)
-                        return;
-                      if (openingRef.current) return;
-                      openItemFromElement(e.currentTarget);
-                    }}
-                    onPointerUp={(e) => {
-                      if (e.pointerType !== "touch") return;
-                      if (draggingRef.current) return;
-                      if (movedRef.current) return;
-                      if (performance.now() - lastDragEndAt.current < 80)
-                        return;
-                      if (openingRef.current) return;
-                      openItemFromElement(e.currentTarget);
-                    }}
+    return (
+        <>
+            <style dangerouslySetInnerHTML={{ __html: cssStyles }} />
+            <div
+                ref={rootRef}
+                className="sphere-root relative w-full h-full bg-black"
+                data-interactive={interactive}
+                style={{
+                    ["--segments-x"]: currentSegments,
+                    ["--segments-y"]: currentSegments,
+                    ["--overlay-blur-color"]: overlayBlurColor,
+                    ["--tile-radius"]: imageBorderRadius,
+                    ["--enlarge-radius"]: openedImageBorderRadius,
+                    ["--image-filter"]: grayscale ? "grayscale(1)" : "none",
+                    touchAction: "none",
+                    overscrollBehavior: "none",
+                }}
+            >
+                <main
+                    ref={mainRef}
+                    className="absolute inset-0 grid place-items-center overflow-hidden select-none bg-transparent"
                     style={{
-                      inset: "10px",
-                      borderRadius: `var(--tile-radius, ${imageBorderRadius})`,
-                      backfaceVisibility: "hidden",
+                        touchAction: "none",
+                        WebkitUserSelect: "none",
                     }}
-                  >
-                    <div className="absolute inset-0 bg-neutral-800 animate-pulse z-0" />
-                    <Image
-                      src={it.previewSrc || it.src}
-                      unoptimized={it.type === "video"}
-                      fill
-                      alt={it.alt}
-                      sizes="200px"
-                      className="object-cover pointer-events-none"
-                      style={{
-                        backfaceVisibility: "hidden",
-                        filter: `var(--image-filter, ${grayscale ? "grayscale(1)" : "none"})`,
-                      }}
+                >
+                    <div className="stage">
+                        <div ref={sphereRef} className="sphere">
+                            {items.map((it, i) => (
+                                <div
+                                    key={`${it.x},${it.y},${i}`}
+                                    className="sphere-item absolute m-auto"
+                                    data-src={it.src}
+                                    data-preview-src={it.previewSrc}
+                                    data-animated-preview-src={it.animatedPreviewSrc}
+                                    data-type={it.type}
+                                    data-alt={it.alt}
+                                    data-caption={it.caption}
+                                    data-offset-x={it.x}
+                                    data-offset-y={it.y}
+                                    data-size-x={it.sizeX}
+                                    data-size-y={it.sizeY}
+                                    style={{
+                                        ["--offset-x"]: it.x,
+                                        ["--offset-y"]: it.y,
+                                        ["--item-size-x"]: it.sizeX,
+                                        ["--item-size-y"]: it.sizeY,
+                                        top: "-999px",
+                                        bottom: "-999px",
+                                        left: "-999px",
+                                        right: "-999px",
+                                    }}
+                                >
+                                    <div
+                                        className="item__image absolute block overflow-hidden cursor-pointer bg-neutral-900 transition-transform duration-300 group"
+                                        role="button"
+                                        tabIndex={0}
+                                        aria-label={it.alt || "Open image"}
+                                        onClick={(e) => {
+                                            if (draggingRef.current) return;
+                                            if (movedRef.current) return;
+                                            if (performance.now() - lastDragEndAt.current < 80) return;
+                                            if (openingRef.current) return;
+                                            openItemFromElement(e.currentTarget);
+                                        }}
+                                        onPointerUp={(e) => {
+                                            if (e.pointerType !== "touch") return;
+                                            if (draggingRef.current) return;
+                                            if (movedRef.current) return;
+                                            if (performance.now() - lastDragEndAt.current < 80) return;
+                                            if (openingRef.current) return;
+                                            openItemFromElement(e.currentTarget);
+                                        }}
+                                        style={{
+                                            inset: "10px",
+                                            borderRadius: `var(--tile-radius, ${imageBorderRadius})`,
+                                            backfaceVisibility: "hidden",
+                                        }}
+                                    >
+                                        <div className="absolute inset-0 bg-neutral-800 animate-pulse z-0" />
+                                        <Image
+                                            src={it.previewSrc || it.src}
+                                            fill
+                                            alt={it.alt}
+                                            sizes="200px"
+                                            className="object-cover pointer-events-none"
+                                            style={{
+                                                backfaceVisibility: "hidden",
+                                                filter: `var(--image-filter, ${grayscale ? "grayscale(1)" : "none"})`,
+                                            }}
+                                        />
+                                        {it.type === "video" && (
+                                            <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+                                                <div className="w-8 h-8 bg-black/50 rounded-full flex items-center justify-center backdrop-blur-sm">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
+                                                        <path d="M8 5v14l11-7z" />
+                                                    </svg>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div
+                        className="absolute inset-0 m-auto z-[3] pointer-events-none"
+                        style={{
+                            backgroundImage: `radial-gradient(rgba(235, 235, 235, 0) 65%, var(--overlay-blur-color, ${overlayBlurColor}) 100%)`,
+                        }}
                     />
-                  </div>
-                </div>
-              ))}
+
+                    <div
+                        className="absolute inset-0 m-auto z-[3] pointer-events-none"
+                        style={{
+                            WebkitMaskImage: `radial-gradient(rgba(235, 235, 235, 0) 70%, var(--overlay-blur-color, ${overlayBlurColor}) 90%)`,
+                            maskImage: `radial-gradient(rgba(235, 235, 235, 0) 70%, var(--overlay-blur-color, ${overlayBlurColor}) 90%)`,
+                            backdropFilter: "blur(3px)",
+                        }}
+                    />
+
+                    <div
+                        className="absolute left-0 right-0 top-0 h-[120px] z-[5] pointer-events-none rotate-180"
+                        style={{
+                            background: `linear-gradient(to bottom, transparent, var(--overlay-blur-color, ${overlayBlurColor}))`,
+                        }}
+                    />
+                    <div
+                        className="absolute left-0 right-0 bottom-0 h-[120px] z-[5] pointer-events-none"
+                        style={{
+                            background: `linear-gradient(to bottom, transparent, var(--overlay-blur-color, ${overlayBlurColor}))`,
+                        }}
+                    />
+
+                    <div ref={viewerRef} className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center" style={{ padding: "var(--viewer-pad)" }}>
+                        <div
+                            ref={scrimRef}
+                            className="scrim absolute inset-0 z-10 pointer-events-none opacity-0 transition-opacity duration-500"
+                            style={{
+                                background: "rgba(0, 0, 0, 0.4)",
+                                backdropFilter: "blur(3px)",
+                            }}
+                        />
+                        <div
+                            ref={frameRef}
+                            className="viewer-frame h-full aspect-square flex"
+                            style={{
+                                borderRadius: `var(--enlarge-radius, ${openedImageBorderRadius})`,
+                            }}
+                        />
+                    </div>
+                </main>
             </div>
-          </div>
-
-          <div
-            className="absolute inset-0 m-auto z-[3] pointer-events-none"
-            style={{
-              backgroundImage: `radial-gradient(rgba(235, 235, 235, 0) 65%, var(--overlay-blur-color, ${overlayBlurColor}) 100%)`,
-            }}
-          />
-
-          <div
-            className="absolute inset-0 m-auto z-[3] pointer-events-none"
-            style={{
-              WebkitMaskImage: `radial-gradient(rgba(235, 235, 235, 0) 70%, var(--overlay-blur-color, ${overlayBlurColor}) 90%)`,
-              maskImage: `radial-gradient(rgba(235, 235, 235, 0) 70%, var(--overlay-blur-color, ${overlayBlurColor}) 90%)`,
-              backdropFilter: "blur(3px)",
-            }}
-          />
-
-          <div
-            className="absolute left-0 right-0 top-0 h-[120px] z-[5] pointer-events-none rotate-180"
-            style={{
-              background: `linear-gradient(to bottom, transparent, var(--overlay-blur-color, ${overlayBlurColor}))`,
-            }}
-          />
-          <div
-            className="absolute left-0 right-0 bottom-0 h-[120px] z-[5] pointer-events-none"
-            style={{
-              background: `linear-gradient(to bottom, transparent, var(--overlay-blur-color, ${overlayBlurColor}))`,
-            }}
-          />
-
-          <div
-            ref={viewerRef}
-            className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center"
-            style={{ padding: "var(--viewer-pad)" }}
-          >
-            <div
-              ref={scrimRef}
-              className="scrim absolute inset-0 z-10 pointer-events-none opacity-0 transition-opacity duration-500"
-              style={{
-                background: "rgba(0, 0, 0, 0.4)",
-                backdropFilter: "blur(3px)",
-              }}
-            />
-            <div
-              ref={frameRef}
-              className="viewer-frame h-full aspect-square flex"
-              style={{
-                borderRadius: `var(--enlarge-radius, ${openedImageBorderRadius})`,
-              }}
-            />
-          </div>
-        </main>
-      </div>
-    </>
-  );
+        </>
+    );
 }
