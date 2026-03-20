@@ -670,14 +670,44 @@ export default function DomeGallery({
             finalTop = frameR.top - mainR.top + (frameR.height - tempRect.height) / 2;
         }
 
+        // Measure Caption Height to adjust Final Target Geometry
+        const captionText = parent.dataset.caption;
+        let captionHeight = 0;
+        if (captionText) {
+            const measureDiv = document.createElement("div");
+            // Match caption styles exactly for accurate measurement
+            // Use finalW - 60 because of the 30px padding applied later
+            measureDiv.style.cssText = `
+                position: absolute;
+                visibility: hidden;
+                width: ${finalW - 60}px;
+                padding-top: 15px;
+                padding-bottom: 5px;
+                font-family: var(--font-spartan);
+                font-size: 1rem;
+                text-align: center;
+                line-height: normal;
+                white-space: pre-wrap;
+                box-sizing: border-box;
+            `;
+            measureDiv.innerText = captionText;
+            document.body.appendChild(measureDiv);
+            captionHeight = measureDiv.offsetHeight;
+            document.body.removeChild(measureDiv);
+        }
+
+        // Adjust final geometry to accommodate the caption without squeezing the media
+        const adjustedFinalH = finalH + captionHeight;
+        const adjustedFinalTop = finalTop - captionHeight / 2;
+
         const overlay = document.createElement("div");
         overlay.className = "enlarge";
         overlay.style.position = "absolute";
-        // Initialize at FINAL position/size
+        // Initialize at ADJUSTED FINAL position/size
         overlay.style.left = finalLeft + "px";
-        overlay.style.top = finalTop + "px";
+        overlay.style.top = adjustedFinalTop + "px";
         overlay.style.width = finalW + "px";
-        overlay.style.height = finalH + "px";
+        overlay.style.height = adjustedFinalH + "px";
 
         overlay.style.opacity = "0";
         overlay.style.zIndex = "30";
@@ -690,13 +720,15 @@ export default function DomeGallery({
         overlay.style.overflow = "hidden";
         overlay.style.boxSizing = "border-box";
         overlay.style.padding = "0px";
+        overlay.style.display = "flex";
+        overlay.style.flexDirection = "column";
+        overlay.style.alignItems = "center"; // Center the square media
 
-        // Calculate Start Transform (Tile -> Final)
-        // tileR is valid. finalW/H are valid.
+        // Calculate Start Transform (Tile -> Final) using adjusted height
         const startTx = tileR.left - mainR.left - finalLeft;
-        const startTy = tileR.top - mainR.top - finalTop;
+        const startTy = tileR.top - mainR.top - adjustedFinalTop;
         const startSx = tileR.width / finalW;
-        const startSy = tileR.height / finalH;
+        const startSy = tileR.height / adjustedFinalH;
 
         // Apply Start Transform immediately
         overlay.style.transform = `translate(${startTx}px, ${startTy}px) scale(${startSx}, ${startSy})`;
@@ -717,35 +749,37 @@ export default function DomeGallery({
             mediaEl.loop = true;
             mediaEl.playsInline = true;
             mediaEl.style.width = "100%";
-            mediaEl.style.height = "100%";
+            mediaEl.style.flex = "none"; // Don't allow it to squeeze
             mediaEl.style.objectFit = "cover";
+            mediaEl.style.aspectRatio = "1 / 1"; // Keep aspect ratio
             mediaEl.style.borderRadius = openedImageBorderRadius;
             mediaEl.style.filter = grayscale ? "grayscale(1)" : "none";
-            mediaEl.style.transition = "filter 0.3s ease";
+            mediaEl.style.transition = "filter 0.3s ease, opacity 0.3s ease";
             overlay.appendChild(mediaEl);
         } else {
             mediaEl = document.createElement("img");
-            if (smallSrc) mediaEl.src = smallSrc;
-            else mediaEl.style.opacity = "0";
+            // Always set src to smallSrc first to ensure immediate display
+            mediaEl.src = smallSrc;
             mediaEl.alt = rawAlt;
             mediaEl.style.width = "100%";
-            mediaEl.style.height = "100%";
+            mediaEl.style.flex = "none"; // Don't allow it to squeeze
             mediaEl.style.objectFit = "cover";
+            mediaEl.style.aspectRatio = "1 / 1"; // Keep aspect ratio
             mediaEl.style.borderRadius = openedImageBorderRadius;
             mediaEl.style.filter = grayscale ? "grayscale(1)" : "none";
-            mediaEl.style.transition = "filter 0.3s ease";
+            mediaEl.style.transition = "filter 0.3s ease, opacity 0.3s ease";
             overlay.appendChild(mediaEl);
         }
 
         // Render Caption if available
-        const captionText = parent.dataset.caption;
         if (captionText) {
             const captionEl = document.createElement("div");
             captionEl.innerText = captionText;
-            captionEl.style.position = "absolute";
-            captionEl.style.bottom = "0";
-            captionEl.style.left = "0";
+            captionEl.style.position = "relative";
             captionEl.style.width = "100%";
+            captionEl.style.paddingTop = "15px";
+            captionEl.style.paddingBottom = "5px";
+            captionEl.style.flexShrink = "0";
             captionEl.style.textShadow = "2px 2px 4px rgba(0, 0, 0, 0.6)";
             captionEl.style.color = "white";
             captionEl.style.fontFamily = "var(--font-spartan)";
@@ -769,7 +803,9 @@ export default function DomeGallery({
             const highResImg = new window.Image();
             highResImg.src = fullSrc;
             highResImg.onload = () => {
-                if (mediaEl.parentNode) {
+                // Check if we are still showing this item
+                if (mediaEl.parentNode && focusedElRef.current === el) {
+                    // Seamlessly swap the src
                     mediaEl.src = fullSrc;
                 }
             };
